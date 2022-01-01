@@ -1,0 +1,3416 @@
+import "vcs";
+import "banks";
+import "vars";
+import "consts";
+import "data";
+
+/*
+
+;===============================================================================
+; R O M - C O D E (Part 1)
+;===============================================================================
+
+   SEG code
+   org $F000
+*/
+in rom @ ROMADDR {
+  //;
+  //; Set up everything so the power up state is known.
+  //;
+
+  Start: // Start
+  nointerrupt = true;       // sei
+  decimal = false;          // cld
+  x = 0xff; //  ldx #$FF
+  s = x; // txs
+  x++ ; // inx
+  a = x ; //   txa
+  clearLoop:
+  oram[x] = a;//   sta VSYNC,x
+  x++;//   inx
+  goto clearLoop if !zero; //bne .clearLoop
+  InitializeGame(); //   jsr InitializeGame
+
+  a = STARTING_MARIOS; //   lda #STARTING_MARIOS
+  numberOfLives = a;   //   sta numberOfLives
+  consoleDebounce--;   //    dec consoleDebounce
+  attractMode--;       //   dec attractMode
+
+  MainLoop:
+  a = backgroundColor; //   lda backgroundColor
+  COLUBK = a; //   sta COLUBK
+  y = 0xff; //   ldy #$FF
+  WSYNC = y; //   sty WSYNC                        ; end the current scan line
+  VBLANK = y; //   sty VBLANK                       ; start the vertical blank period (turn off TIA)
+  a = OVERSCAN_TIME; //   lda #OVERSCAN_TIME
+  TIM64T = a; //   sta TIM64T
+  randomSeed++; //   inc randomSeed
+  a = <:(&HorizontalColors); //   lda #<HorizontalColors
+  y = <:(NullCharacter); //   ldy #<NullCharacter
+  x = NUM_WALKWAYS; //   ldx #NUM_WALKWAYS
+
+  setLSBLoop:
+  marioColorPointerLSB[x] = a; //   sta marioColorPointerLSB,x       ; set the LSB value for Mario colors
+  obstaclePointerLSB[x] = y; // sty obstaclePointerLSB,x         ; set the LSB value for the obstacle
+  x--; //   dex
+  goto setLSBLoop if !negative; //   bpl .setLSBLoop
+  frameCount++; //    inc frameCount                   ; incremented each frame
+  a = frameCount; //   lda frameCount
+  a = a & BONUS_TIMER_DELAY; //   and #BONUS_TIMER_DELAY           ; reduce timer ~ every 2 seconds
+  goto skipAttractModeSet if !zero; //   bne .skipAttractModeSet
+  a = gameState; //   lda gameState
+  goto ProcessAttractMode if !negative; //   bpl ProcessAttractMode
+
+  //;
+  //; reduce the bonus timer
+  //;
+  a = bonusTimer; //   lda bonusTimer
+  decimal = true; //   sed                              ; set to decimal mode (timer stored in BCD)
+  carry = true; //   sec
+  a = a -#0x01; //   sbc #$01                         ; reduce the timer by 1 (or 100 to the player)
+    bonusTimer = a; //   sta bonusTimer
+  decimal = false; //   cld
+  goto ProcessAttractMode if !zero; //   bne ProcessAttractMode
+
+  PlayDeathSound(); //   jsr PlayDeathSound               ; timer = 0 so play the death sound
+
+  /*;-------------------------------------------------------------ProcessAttractMode
+;
+; The attract mode was created to save the television from screen burnout. If a
+; still picture stays on the screen for a period of time, it can permenatly burn
+; itself into the screen.
+;
+*/
+  ProcessAttractMode:
+  a = attractMode;  //   lda attractMode                  ; if not in attract mode (D7 = 0) then
+  goto skipColorCycling if !negative; //   bpl .skipColorCycling            ; skip the color cycling
+  backgroundColor++; //   inc backgroundColor              ; increase the background color
+  playfieldColor--; //  dec playfieldColor               ; reduce the playfield color
+
+  skipColorCycling:
+  attractModeTimer++; //   inc attractModeTimer             ; once the attractModeTimer wraps to 0 then the
+  goto skipAttractModeSet if !zero; //   bne .skipAttractModeSet          ; attract mode state is set
+
+  attractMode = x;//   stx attractMode                  ; set the attract mode to cycle to colors (x = #$FF)
+  skipAttractModeSet:
+  y = 0x00; //   ldy #$00
+  cmp(x,SWCHA); //   cpx SWCHA                        ; check the joystick value with the attract mode
+  goto endAttractMode if !zero; //   bne .endAttractMode              ; if the joystick is pushed end the color cycling
+  a = INPT4m30;  //   lda INPT4
+  goto CheckConsoleSwitches if negative; //   bmi CheckConsoleSwitches
+
+  endAttractMode:
+  attractModeTimer = y; //   sty attractModeTimer             ; reset attract mode timer to 0
+  a = attractMode;  //   lda attractMode                  ; check to see if the colors are cycling
+  goto CheckConsoleSwitches if !negative; //   bpl CheckConsoleSwitches
+  attractMode = y; //   sty attractMode                  ; clear the attract mode (y = 0)
+  InitializeGame(); //   jsr InitializeGame
+
+  CheckConsoleSwitches:
+  a = SWCHB; //   lda SWCHB                        ; read the console switches
+  a = a >>> 1; //   lsr                              ; reset now in the carry bit
+  goto skipReset if carry; //   bcs .skipReset
+  a = consoleDebounce; //   lda consoleDebounce
+  goto ClearGameRAM if negative; //   bmi ClearGameRAM
+  consoleDebounce--; //   dec consoleDebounce
+  /*;
+; This routine clears RAM starting at gameScreen ($90) and goes back to PF2
+; I don't know why this is done. This same type of RAM clear in also used
+; in Space Jockey. I guess Garry just carried over old code.
+:*/
+  ClearGameRAM:
+  x = 0x42;//   ldx #$42
+  a = 0x00;//   lda #$00
+  clearRAM:
+
+  PF164[x] = a;//   sta PF1+64,x                     ; clear RAM starting gameScreen back to PF2
+  x--; //   dex
+  goto clearRAM if !zero; //   bne .clearRAM
+  InitializeGame(); //   jsr InitializeGame
+  a = STARTING_MARIOS; //   lda #STARTING_MARIOS             ; set the starting Mario lives
+  numberOfLives = a; //   sta numberOfLives
+  goto LF0B2 if !zero; //   bne LF0B2
+
+  skipReset:
+  a = gameState; //   lda gameState                    ; game is progress
+
+  goto LF0B5 if negative; //    bmi LF0B5
+  a = soundDuration; //  lda soundDuration
+  goto LF0B2 if !zero; //   bne LF0B2
+  x = INPT4m30; //   ldx INPT4                        ; check the fire button
+  goto LF0B2 if negative; //   bmi LF0B2
+  a = gameState; //   lda gameState
+  a = a >>> 1;  //   lsr
+  goto resetBonusTimer if carry; //   bcs .resetBonusTimer             ; reset timer if starting a new level
+  a = consoleDebounce; //   lda consoleDebounce
+  goto LF0B2 if !negative; //   bpl LF0B2
+
+  resetBonusTimer:
+  a = STARTING_BONUS;//   lda #STARTING_BONUS
+  bonusTimer = a; //   sta bonusTimer
+  x = 0xFF; //   ldx #$FF
+  gameState = x; //   stx gameState                    ; set game state to show game not over
+  frameCount = y; //   sty frameCount
+  consoleDebounce = y; //   sty consoleDebounce
+
+  LF0B2:
+  goto LF2CE; //  JMP    LF2CE   ;3
+
+  LF0B5:
+  a = losingLifeFlag; //   lda losingLifeFlag
+  goto LF0BD if negative; //   bmi LF0BD
+  marioFrameDelay--; //   dec marioFrameDelay
+  goto CheckMarioMovement if negative; //   bmi CheckMarioMovement
+
+  LF0BD:
+  goto CheckForJumpingMario; //   jmp CheckForJumpingMario
+
+  CheckMarioMovement:
+  a = MARIO_MOVE_RATE; //   lda #MARIO_MOVE_RATE             ; reset the Mario move frame rate
+  marioFrameDelay = a; //   sta marioFrameDelay
+  a = SWCHA; //   lda SWCHA                        ; read the joystick
+  x = jumpHangTime; //   ldx jumpHangTime
+  goto setJoystickValue if zero;//   beq .setJoystickValue            ; if Mario is no longer jumping then store
+  //                                    ; the joystick direction
+  a = jumpingDirection; //   lda jumpingDirection             ; store the direction of Mario's last jump
+  setJoystickValue:
+  joystickValue = a; //   sta joystickValue
+  x = marioDirection; //   ldx marioDirection
+  goto DetermineWalkway if !negative; //   bpl DetermineWalkway
+  DetermineLadderMovement(); //   jsr DetermineLadderMovement
+  goto DetermineWalkway if !carry; //   bcc DetermineWalkway
+
+  goto CheckVerticalJoystickValues; //   jmp CheckVerticalJoystickValues
+
+  DetermineWalkway:
+  x = NUM_WALKWAYS; //   ldx #NUM_WALKWAYS
+  a = verPosMario; //   lda verPosMario
+  carry = true; //   sec
+  a = a -# WALKWAY_HEIGHTM5;  //   sbc #WALKWAY_HEIGHT-5
+  goto walkwayFound if !carry; //   bcc .walkwayFound
+  determineWalkwayLoop:
+  x--; //   dex
+  a = a -# WALKWAY_HEIGHTP1; //   sbc #WALKWAY_HEIGHT+1
+  goto determineWalkwayLoop if carry; //   bcs .determineWalkwayLoop
+
+  walkwayFound:
+  walkwayNumber = x; //   stx walkwayNumber
+  a = joystickValue; //   lda joystickValue
+  a = a << 1; //   asl                              ; right motion is now if carry bit
+  goto skipLeftMotion if negative; //   bmi .skipLeftMotion              ; left motion in D7
+  randomSeed++; //   inc randomSeed
+  a = NO_REFLECT; //   lda #NO_REFLECT
+  marioDirection = a; //   sta marioDirection
+  horPosMario--; //   dec horPosMario                  ; move Mario left
+  VAR84--; //   dec $84
+  y = XMIN_LEVEL1; //   ldy #XMIN_LEVEL1                 ; load y with the minimum horiz value for the firefox screen
+  a = gameScreen; //   lda gameScreen                   ; get the current game screen
+  goto checkMinHorizPosition if !zero; //   bne .checkMinHorizPosition       ; if the Firefox screen then branch
+  a = walkwayNumber; //   lda walkwayNumber
+  a = a >>> 1; //   lsr                              ; shift the walkway number right
+  goto checkMinHorizPosition if carry; //   bcs .checkMinHorizPosition       ; if it's an odd walkway then branch
+  y = XMIN_ODD_LEVEL0; //   ldy #XMIN_ODD_LEVEL0
+  checkMinHorizPosition:
+  cmp(y,horPosMario); //   cpy horPosMario
+  goto CheckRampValues if !carry; //   bcc CheckRampValues
+  goto setMarioHorizPosition if carry; //   bcs .setMarioHorizPosition
+  skipLeftMotion:
+  goto CheckVerticalJoystickValues if carry; //   bcs CheckVerticalJoystickValues
+  randomSeed++;//   inc randomSeed
+  a = REFLECT; //   lda #REFLECT
+  marioDirection = a; //   sta marioDirection
+  horPosMario++; //   inc horPosMario                  ; move Mario right
+  VAR84++; //   inc $84
+  y = XMAX_LEVEL1; //   ldy #XMAX_LEVEL1
+  a = gameScreen; //   lda gameScreen
+  goto checkMaxHorizPosition if !zero; //   bne .checkMaxHorizPosition
+  a = walkwayNumber; //   lda walkwayNumber
+  a = a >>> 1; //   lsr
+  goto checkMaxHorizPosition if !carry; //   bcc .checkMaxHorizPosition
+  y = XMAX_ODD_LEVEL0; //   ldy #XMAX_ODD_LEVEL0
+  checkMaxHorizPosition:
+  cmp(y,horPosMario); //   cpy horPosMario
+  goto CheckRampValues if carry; //   bcs CheckRampValues
+
+  setMarioHorizPosition:
+  horPosMario = y; //    sty horPosMario
+  VAR84 = y; //   sty $84
+
+  LF12E:
+  goto CheckForJumpingMario; //   jmp CheckForJumpingMario
+
+  CheckRampValues: // SUBROUTINE
+  a = gameScreen; //   lda gameScreen
+  goto doneMarioHorizMovement if !zero; //   bne .doneMarioHorizMovement      ; if Firefox screen then no ramps to check
+  a = walkwayNumber; //    lda walkwayNumber                ; if this is the first walkway then
+  goto doneMarioHorizMovement if zero; //   beq .doneMarioHorizMovement      ; no need to check for ramp increase/decrease
+  cmp(a,0x05); //   cmp #$05                         ; if this the fifth walkway then
+  goto doneMarioHorizMovement if zero; //    beq .doneMarioHorizMovement      ; no need to check for ramp increase/decrease
+  x = 0x07; //   ldx #$07
+  a = horPosMario; //   lda horPosMario
+  y = marioDirection; //   ldy marioDirection
+  goto rampLoop1 if !zero; //   bne .rampLoop                    ; branch if Mario is moving left
+  carry = false; //   clc
+  a = a +#1; //   adc #$01
+    rampLoop1:
+  x--; //   dex
+  goto doneMarioHorizMovement if negative;//   bmi .doneMarioHorizMovement
+  cmp(a,RampHorizValues[x]); //   cmp RampHorizValues,x
+  goto rampLoop1 if !zero; //   bne .rampLoop
+  a = walkwayNumber; //   lda walkwayNumber                ; get the current walkway number
+  a = a >>> 1; //   lsr
+  goto checkEvenNumberRamp if !carry; //   bcc .checkEvenNumberRamp         ; if it's even then branch
+  a = y; //   tya                              ; move Mario direction to the accumulator
+  goto moveUpRamp if !zero; //   bne .moveUpRamp                  ; branch if Mario is moving left
+  goto moveDownRamp if zero; //   beq .moveDownRamp
+  checkEvenNumberRamp:
+  a = y; //   tya                              ; move Mario direction to the accumulator
+  goto moveDownRamp if !zero; //   bne .moveDownRamp                ; branch if Mario is moving left
+  moveUpRamp:
+  verPosMario++; //   inc verPosMario
+  goto doneMarioHorizMovement if !zero; //   bne .doneMarioHorizMovement
+  moveDownRamp:
+  verPosMario--; //   dec verPosMario
+
+  doneMarioHorizMovement:
+  goto CheckRivets; //   jmp CheckRivits
+
+  CheckVerticalJoystickValues:
+  a = joystickValue; //   lda joystickValue                ; get the joystick value
+  a = a & MOVE_DOWN; //   and #MOVE_DOWN                   ; and check to see if the player is pushing down
+  goto CheckForUpMotion if !zero; //   bne CheckForUpMotion             ; if not then check if they are pushing up
+
+  randomSeed--; //   dec randomSeed
+  a = marioDirection; //   lda marioDirection               ; get the current direction of Mario
+  goto MarioMovingDown if negative; //   bmi MarioMovingDown              ; if moving vertically then branch
+  a = hammerTime; //   lda hammerTime                   ; if Mario is not done using the hammer
+  goto LF12E if !zero; //   bne LF12E                        ; then branch (can't carry it with you)
+  y = 0x08; //    ldy #$08                         ; offset for the down ladder table
+  x = 0x08; //   ldx #$08                         ; maximum number of ladders Mario can move down
+  a = gameScreen; //   lda gameScreen
+  goto DetermineMarioDownLadder if zero;//   beq DetermineMarioDownLadder     ; branch if barrels
+  y = <:(&FirefoxDownLadderTable as u16 - &DownLadderTable as u16 +MAX_FIREFOX_LADDERS); //   ldy #<FirefoxDownLadderTable-DownLadderTable+MAX_FIREFOX_LADDERS
+  x = MAX_FIREFOX_LADDERS; //   ldx #MAX_FIREFOX_LADDERS         ; maximum number of ladders Mario can move down
+
+DetermineMarioDownLadder:
+  a = verPosMario; //   lda verPosMario
+downLadderCheckLoop:
+  y--; //    dey
+  x--; //    dex
+  goto LF12E if negative; //   bmi LF12E
+  cmp(a,DownLadderTable[y]); //   cmp DownLadderTable,y
+  goto downLadderCheckLoop if !zero; //   bne .downLadderCheckLoop
+  a = horPosMario; //   lda horPosMario
+  carry = true; //   sec
+  a = a -#LadderHorizValues[y]; //   sbc LadderHorizValues,y
+    cmp(a,LADDER_RANGE); //   cmp #LADDER_RANGE
+  goto DetermineMarioDownLadder if carry; //   bcs DetermineMarioDownLadder
+  ladderNumber = y; //   sty ladderNumber
+MarioMovingDown:
+  a = 0xFE; //   lda #$FE
+  marioDirection = a; //   sta marioDirection
+  a = verPosMario; //   lda verPosMario
+  y = ladderNumber; //   ldy ladderNumber
+  cmp(a,UpLadderTable[y]); //   cmp UpLadderTable,y
+  goto moveMarioDown if !zero; //   bne .moveMarioDown
+
+DoneMarioVerticalMovement:
+goto CheckForJumpingMario;//  jmp CheckForJumpingMario
+
+moveMarioDown:
+  verPosMario++; //   inc verPosMario
+  goto CheckRivets if !zero; //   bne CheckRivits
+
+CheckForUpMotion:
+  a = joystickValue; //   lda joystickValue                ; get the joystick value
+  a = a & MOVE_UP; //   and #MOVE_UP                     ; and check to see if the player is pushing up
+  goto DoneMarioVerticalMovement if !zero; //   bne DoneMarioVerticalMovement    ; if not then leave Mario vertical movement check
+  randomSeed--; //   dec randomSeed
+  a = marioDirection; //    lda marioDirection               ; get the current direction of Mario
+  goto MarioMovingUp if negative; //    bmi MarioMovingUp                ; Mario is moving up
+  a = hammerTime; //    lda hammerTime                   ; if Mario is not done using the hammer
+  goto DoneMarioVerticalMovement if !zero; //    bne DoneMarioVerticalMovement    ; then branch
+  x =  0x09; //    ldx #$09                         ; offset for the up ladder table
+  y =  0x09; //    ldy #$09                         ; maximum number of ladders Mario can move up
+  a = gameScreen; //    lda gameScreen
+  goto DetermineMarioUpLadder if zero; //    beq DetermineMarioUpLadder
+
+  y = <:(&FirefoxUpLadderTable as u16 -&UpLadderTable as u16+MAX_FIREFOX_LADDERS); //    ldy #<FirefoxUpLadderTable-UpLadderTable+MAX_FIREFOX_LADDERS
+  x = MAX_FIREFOX_LADDERS; //    ldx #MAX_FIREFOX_LADDERS         ; maximum number of ladders Mario can move down
+  DetermineMarioUpLadder: //DetermineMarioUpLadder
+  a = verPosMario; //    lda verPosMario
+
+  upLadderCheckLoop: // .upLadderCheckLoop
+  y--; //    dey
+  x--; //    dex
+  goto DoneMarioVerticalMovement if negative; //    bmi DoneMarioVerticalMovement
+  cmp(a, UpLadderTable[y]  ); // CMP //    cmp UpLadderTable,y
+  goto upLadderCheckLoop if !zero; //    bne .upLadderCheckLoop
+  
+  a = horPosMario; //    lda horPosMario
+  carry = true;  //    sec
+  a = a -# LadderHorizValues[y]; //    sbc LadderHorizValues,y
+  cmp(a, LADDER_RANGE  ); // CMP //    cmp #LADDER_RANGE
+  goto DetermineMarioUpLadder if carry; //    bcs DetermineMarioUpLadder
+
+  ladderNumber = y; //    sty ladderNumber
+
+  MarioMovingUp: // MarioMovingUp
+  a =  0xFF; //    lda #$FF
+  marioDirection = a; //    sta marioDirection
+  a = verPosMario; //    lda verPosMario
+  y = ladderNumber; //    ldy ladderNumber
+  cmp(a, DownLadderTable[y]  ); // CMP //    cmp DownLadderTable,y
+  goto CheckForJumpingMario if zero; //    beq CheckForJumpingMario
+
+  verPosMario--; //    dec verPosMario
+
+  CheckRivets: // CheckRivits
+  a = gameScreen; //    lda gameScreen                   ; rivits aren't used on the barrel screen
+  goto PlayWalkingSound if zero; //    beq PlayWalkingSound             ; so branch to play the walking sound
+
+  x = walkwayNumber; //    ldx walkwayNumber
+  cmp(x,  0x01); //    cpx #$01                         ; if Mario is on the last platform then branch
+  goto PlayWalkingSound if zero; //    beq PlayWalkingSound             ; no rivits on the last platform
+
+  a = rivetsm2[x]; //    lda rivits-2,x                   ; get the rivit value for the walkway
+  y = horPosMario; //    ldy horPosMario                  ; get Mario's horizontal position
+  
+  cmp(y, HORIZ_LEFT_RIVET); //    cpy #HORIZ_LEFT_RIVIT            ; is Mario on the left rivit if so branch
+  goto determineLeftRivetValue if zero; //    beq .determineLeftRivitValue
+  cmp(y, HORIZ_RIGHT_RIVET); //    cpy #HORIZ_RIGHT_RIVIT           ; if Mario is not on the right rivit then branch
+  goto PlayWalkingSound if !zero; //    bne PlayWalkingSound
+
+determinerightrivetvalue: // .determineRightRivitValue
+  cmp(a, RIGHT_RIVET_VALUE  ); // CMP //    cmp #RIGHT_RIVIT_VALUE           ; if the right rivit has been pulled then branch
+  goto marioStandingInTheGap if carry; //    bcs .marioStandingInTheGap
+  a = a +# RIGHT_RIVET_VALUE; //    adc #RIGHT_RIVIT_VALUE           ; show the right rivit was pulled
+  goto rivetPulled if !negative; //    bpl .rivitPulled
+
+determineLeftRivetValue: // .determineLeftRivitValue
+  cmp(a, COMPLETE_RIVET_WALKWAY  ); // CMP //    cmp #COMPLETE_RIVIT_WALKWAY      ; have all rivits been pulled for the walkway
+  goto marioStandingInTheGap if carry; //    bcs .marioStandingInTheGap       ; branch if so...
+  cmp(a, LEFT_RIVET_VALUE  ); // CMP //    cmp #LEFT_RIVIT_VALUE            ; if the left rivit has not been pulled then pull it
+  goto pullLeftRivet if !carry; //    bcc .pullLeftRivit
+  cmp(a, RIGHT_RIVET_VALUE  ); // CMP //    cmp #RIGHT_RIVIT_VALUE
+  goto marioStandingInTheGap if !carry; //    bcc .marioStandingInTheGap
+
+pullLeftRivet: // .pullLeftRivit
+  carry = false; //    clc
+  a = a +# LEFT_RIVET_VALUE; //    adc #LEFT_RIVIT_VALUE
+
+rivetPulled: // .rivitPulled
+  rivetsm2[x] = a; //    sta rivits-2,x
+  Add100Points(); //    jsr Add100Points
+  goto PlayWalkingSound if !zero; //    bne PlayWalkingSound
+
+marioStandingInTheGap:// .marioStandingInTheGap
+  a = jumpHangTime;//    lda jumpHangTime
+  goto PlayWalkingSound if !zero;//    bne PlayWalkingSound
+// ;
+// ; Mario is standing in a hole where a rivit use to be so the player loses a life
+// ;
+  PlayDeathSound();//    jsr PlayDeathSound
+//    
+PlayWalkingSound:// PlayWalkingSound
+  a = soundDuration;//    lda soundDuration
+  goto CheckForJumpingMario if !zero;//    bne CheckForJumpingMario
+//    
+  a = horPosMario;//    lda horPosMario
+  x = marioDirection;//    ldx marioDirection
+  goto walkingSoundFrequencyIndex if !negative;//    bpl .walkingSoundFrequencyIndex
+  a = verPosMario;//    lda verPosMario
+  
+walkingSoundFrequencyIndex:// .walkingSoundFrequencyIndex
+  a = a &  0x03;//    and #$03
+  goto CheckForJumpingMario if !zero;//    bne CheckForJumpingMario
+  a =  0x05;//    lda #$05
+  AUDC0 = a;//    sta AUDC0
+  a =  0x0B;//    lda #$0B
+  AUDV0 = a;//    sta AUDV0
+  a =  0x02;//    lda #$02
+  soundDuration = a;//    sta soundDuration
+  soundIndex = a;//    sta soundIndex
+  goto ReadFirebuttonForJump if !zero;//    bne ReadFirebuttonForJump
+//    
+
+CheckForJumpingMario:
+  a = jumpHangTime; //   lda jumpHangTime
+  goto ReadFirebuttonForJump if zero; //   beq ReadFirebuttonForJump
+//;   
+//; Mario is jumping
+//; This routine checks to see if Mario is jumping over a barrel or Firefox
+//;
+  x = MAX_OBSTACLES; //   ldx #MAX_OBSTACLES
+
+checkNextObstacle:
+  x--; //   dex
+  goto doneJumpingOverCheck if negative; //   bmi .doneJumpingOverCheck
+a = horPosMario; //   lda horPosMario                  ; get the horizontal position of Mario
+  carry = true; //   sec
+  a = a -# horPosP1A[x]; //   sbc horPosP1,x                   ; subtract it by the obstacle's horizontal position
+  y = a; //   tay
+  y++; //   iny
+  cmp(y,0x03); //   cpy #$03                         ; if the value >= 3 then check the next obstacle
+  goto checkNextObstacle if carry; //   bcs .checkNextObstacle
+a = verPosMario; //   lda verPosMario                  ; get Mario's vertical position
+  carry = true; //   sec
+  a = a -#verPosP1A[x]; //   sbc verPosP1,x                   ; subtract it by the obstacle's vertical position
+ cmp(a,0x04); //  cmp #$04
+  goto checkNextObstacle if carry; //   bcs .checkNextObstacle           ; if it's >= 4 then check the next obstacle
+  a = jumpingObstacle; //   lda jumpingObstacle
+  goto JumpingMario if negative; //   bmi JumpingMario                 ; already awarded the 100 points
+  jumpingObstacle--; //   dec jumpingObstacle
+Add100Points(); //   jsr Add100Points       
+goto JumpingMario; //   jmp JumpingMario
+doneJumpingOverCheck:
+  x++; //   inx
+  jumpingObstacle = x; //   stx jumpingObstacle
+
+JumpingMario:
+  a = soundDuration; //   lda soundDuration
+  cmp(a,0x01); //   cmp #$01
+  goto reduceHangtime if !zero; //   bne .reduceHangtime
+  a = 0x0C; //   lda #$0C 
+  AUDC0 = a; //   sta AUDC0
+  a = jumpHangTime; //   lda jumpHangTime
+  a = a >>> 1; // lsr
+  AUDV0 = a; //   sta AUDV0
+reduceHangtime:
+  jumpHangTime--; //   dec jumpHangTime
+  goto LF2CE if !zero; //   bne LF2CE
+  a = verPosMario; //   lda verPosMario
+  carry = false; //   clc
+  a = a +#JUMPING_HEIGHT; //   adc #JUMPING_HEIGHT
+    verPosMario = a; //   sta verPosMario
+  a = 0x00; //   lda #$00
+  VAR84 = a; //   sta $84
+  goto LF2CE if zero; //   beq LF2CE
+
+  
+ReadFirebuttonForJump:
+   a = INPT4m30; //lda INPT4
+   a = a | losingLifeFlag; //ora losingLifeFlag
+   goto clearFireButtonDebounce if negative; //bmi .clearFireButtonDebounce
+
+   a = hammerTime;  //   lda hammerTime
+  goto clearFireButtonDebounce if !zero; //   bne .clearFireButtonDebounce
+
+  a = marioDirection; //   lda marioDirection
+  goto LF2AD if !negative; //   bpl LF2AD                        ; if Mario is moving horiz then branch
+DetermineLadderMovement(); //   jsr DetermineLadderMovement
+  goto clearFireButtonDebounce if carry; //   bcs .clearFireButtonDebounce
+  a = 0x00; //   lda #$00
+  marioDirection = a; //   sta marioDirection
+LF2AD:
+  y = fireButtonDebounce; //   ldy fireButtonDebounce
+  goto LF2CE if !zero; //   bne LF2CE
+
+  y++; //   iny
+  soundDuration = y; //   sty soundDuration
+  fireButtonDebounce--; //   dec fireButtonDebounce
+  a = SWCHA; //   lda SWCHA
+  jumpingDirection = a; //   sta jumpingDirection
+  a = verPosMario; //   lda verPosMario
+  carry = true; //   sec
+  a = a -#JUMPING_HEIGHT; //   sbc #JUMPING_HEIGHT
+    verPosMario = a; //   sta verPosMario
+  a = JUMP_HANGTIME; //   lda #JUMP_HANGTIME
+  jumpHangTime = a; //   sta jumpHangTime
+  soundIndex = a; //   sta soundIndex
+  goto LF2CE if !zero; //   bne LF2CE
+
+clearFireButtonDebounce:
+  a = 0x00; //   lda #$00
+  fireButtonDebounce = a; //   sta fireButtonDebounce
+  
+LF2CE:
+  x = marioDirection; //   ldx marioDirection               ; Mario moving horiz then branch
+  goto LF2DD if !negative; //   bpl LF2DD
+  x = 0x05; //   ldx #$05
+  DetermineLadderMovement(); //   jsr DetermineLadderMovement
+  goto LF2DA if carry; //bcs LF2DA
+  x++; //   inx
+
+LF2DA:
+  a = x; //   txa
+  goto LF2E8 if !zero; //   bne LF2E8
+
+LF2DD:
+  a = VAR84; //`   lda $84
+  a = a & 0x06; //   and #$06
+ a = a >>> 1; //   lsr
+x = jumpHangTime; //  ldx jumpHangTime
+  goto LF2E8 if zero; //   beq LF2E8
+  a = 0x04; //   lda #$04
+LF2E8:
+  y = a; //   tay
+  a = verPosMario; //   lda verPosMario                  ; get the vertical position of Mario
+  x = NUM_WALKWAYS; //   ldx #NUM_WALKWAYS
+
+
+walkwayLoop:
+  cmp(a,0x2E); //   cmp #$2E
+  goto SetMarioGraphicPointers if !carry; //   bcc SetMarioGraphicPointers      ; no need to calculate walkway number
+  x--; //   dex                              ; reduce the walkway value
+  a = a -# (WALKWAY_HEIGHT + 1); //   sbc #WALKWAY_HEIGHT+1            ; subtract Mario's position by walkway height
+goto walkwayLoop if carry; //  bcs .walkwayLoop
+
+SetMarioGraphicPointers:
+  temp = y; //   sty temp
+  marioOffset = a; //   sta marioOffset
+  a = a +# MarioColorTable[y]; //   adc MarioColorTable,y
+  marioColorPointerLSB[x] = a; //    sta marioColorPointerLSB,x
+
+  a = >:&MarioGraphics; //   lda #>MarioGraphics
+  marioGraphicPointerA[1] = a; //   sta marioGraphicPointer+1
+  a = marioOffset; //   lda marioOffset
+  carry = false; //   clc
+  a = a +#MarioAnimationTable[y]; //   adc MarioAnimationTable,y
+    marioGraphicPointer = a; //   sta marioGraphicPointer
+  StoreMarioGraphics(); //   jsr StoreMarioGraphics
+  a = marioOffset; //   lda marioOffset
+  carry = true; //   sec
+  a = a -# (WALKWAY_HEIGHT+2); //   sbc #WALKWAY_HEIGHT+2
+  goto CheckMarioWithHammer if !carry; //   bcc CheckMarioWithHammer
+  temp = a; //   sta temp
+  cmp(x,0x01); //   cpx #$01
+  goto CheckMarioWithHammer if !carry; //   bcc CheckMarioWithHammer
+
+  a = marioColorPointerLSB[x]; //   lda marioColorPointerLSB,x
+  a = a -#  (WALKWAY_HEIGHT+1); //sbc #WALKWAY_HEIGHT+1
+  marioColorPointerLSBM1[x] = a; //   sta marioColorPointerLSB-1,x
+  a = marioGraphicPointer;  //   lda marioGraphicPointer
+  carry = true; //   sec
+  a = a -# ( WALKWAY_HEIGHT+1); //   sbc #WALKWAY_HEIGHT+1
+  marioGraphicPointer = a; //   sta marioGraphicPointer
+  y = WALKWAY_HEIGHT; //   ldy #WALKWAY_HEIGHT
+LF32A:
+  temp--; //   dec temp
+  goto LF336 if negative; //   bmi LF336
+  a = (marioGraphicPointerB as *u8)[y]; //   lda (marioGraphicPointer),y
+  zpMarioGraphics[y] = a; //   sta zpMarioGraphics,y
+  y--; //   dey
+  goto LF32A if !negative; //   bpl LF32A
+
+LF336:
+  a = 0x06; //   lda #$06
+  temp = a; //   sta temp
+  a = 0x00; //   lda #$00
+LF33C:
+  zpMarioGraphics[y] = a; //   sta zpMarioGraphics,y
+  y--; //   dey
+  temp--; //   dec temp
+  goto LF33C if !negative; //   bpl LF33C
+
+CheckMarioWithHammer:
+  a = hammerTime; //   lda hammerTime                   ; if Mario currently has the hammer then don't
+  goto setHammerHorizPosition if !zero; //   bne .setHammerHorizPosition      ; reset the hammer time
+a = CXM1P; //   lda CXM1P
+  goto LF381 if !negative; //   bpl LF381
+a = jumpHangTime; //   lda jumpHangTime
+  goto LF381 if zero; //   beq LF381
+a = MAX_HAMMER_TIME;  //   lda #MAX_HAMMER_TIME             ; set the time for Mario to hold the hammer
+  hammerTime = a; //   sta hammerTime
+
+setHammerHorizPosition:
+  a = 0x09; //   lda #$09
+  y = marioDirection; //   ldy marioDirection
+  goto offsetHammerPosition if !zero; //   bne .offsetHammerPosition        ; Mario moving right so branch
+  a = 0xFE; //   lda #$FE
+offsetHammerPosition:
+  carry = false; //   clc
+  a = a +# horPosMario; //   adc horPosMario
+  horPosHammer = a; //   sta horPosHammer
+  y = <:(&MallotAnimation2 as u16); //   ldy #<MallotAnimation2
+  x = <:(&HandleAnimation2 as u16); //   ldx #<HandleAnimation2
+a = frameCount; //   lda frameCount
+  a = a & 0x08; //   and #$08
+  goto SetHammerPointers if !zero; //   bne SetHammerPointers
+ x = <:(&HandleAnimation1); //   ldx #<HandleAnimation1
+ y = <:(&MallotAnimation1); //  ldy #<MallotAnimation1
+
+SetHammerPointers:
+  missilePointer = y; //   sty missilePointer
+  ballPointer = x; //   stx ballPointer
+ frameCount = a; //   lda frameCount
+  goto LF381 if !zero; //   bne LF381
+hammerTime--; //   dec hammerTime
+  goto LF381 if !zero; //   bne LF381
+a = <:(&NoHammerAnimation); //   lda #<NoHammerAnimation
+  missilePointer = a; //   sta missilePointer
+  ballPointer = a; //   sta ballPointer
+
+LF381:
+  a = soundDuration; //   lda soundDuration
+  goto setAudioVolume if zero; //   beq .setAudioVolume
+  cmp(a,0x04); //   cmp #$04
+  goto LF38F if !carry; //   bcc LF38F
+  a = frameCount;  //   lda frameCount
+  a = a & 0x03; //   and #$03
+  goto waitTime if !zero; //   bne .waitTime
+
+LF38F:
+  soundIndex--; //   dec soundIndex
+  goto turnOffSound if negative; //   bmi .turnOffSound
+a = soundDuration; //   lda soundDuration
+   a = a << 1; //asl
+  y = a; //   tay
+
+  a = (&AudioFrequencyTablem2 as *u8)[y]; //   lda AudioFrequecyTable-2,y
+  audioFrequencyPointer = a; //   sta audioFrequecyPointer
+  a = AudioFrequencyTablem1[y];  //   lda AudioFrequecyTable-1,y
+  audioFrequencyPointerp1 = a; //   sta audioFrequecyPointer+1
+y = soundIndex; //   ldy soundIndex
+  a = (audioFrequencyPointer16 as *u8)[y]; //   lda (audioFrequecyPointer),y
+  AUDF0 = a; //   sta AUDF0
+  goto waitTime if !negative; //   bpl .waitTime
+
+turnOffSound:
+  a = 0x00; //   lda #$00
+  soundDuration = a; //   sta soundDuration
+setAudioVolume:
+  AUDV0 = a; //   sta AUDV0
+
+waitTime:
+  x = INTIM; //   ldx INTIM
+  goto waitTime if !zero; //   bne .waitTime
+/*
+;
+; start new frame
+;
+*/
+  WSYNC = x; //   stx WSYNC                        ; end current scan line
+  a = 0x02; //   lda #$02
+  VSYNC = a ; //   sta VSYNC                        ; start vertical sync
+  WSYNC = a; //   sta WSYNC
+WSYNC = a; //   sta WSYNC
+  WSYNC = a; //   sta WSYNC
+  VSYNC = x; //   stx VSYNC                        ; end vertical sync
+a = VBLANK_TIME; //   lda #VBLANK_TIME
+  WSYNC = y; //   sty WSYNC
+  TIM64T = a; //   sta TIM64T
+a = gameState; //   lda gameState
+  cmp(a,LEVEL_COMPLETED); //   cmp #LEVEL_COMPLETED
+  goto LF3F1 if zero; //   beq LF3F1
+
+  a = gameScreen; //   lda gameScreen
+  goto checkBarrelsComplete if zero; //   beq .checkBarrelsComplete
+
+CheckForLevelComplete:
+  x = 0x03; //   ldx #$03
+rivetLoop:
+a = rivetsA[x]; //  lda rivits,x
+  cmp(a,COMPLETE_RIVET_WALKWAY); //   cmp #COMPLETE_RIVIT_WALKWAY
+  goto levelNotDone if !carry; //   bcc .levelNotDone
+  x--; //   dex
+  goto rivetLoop if !negative; //   bpl .rivitLoop
+  goto levelCompleted if negative; //   bmi .levelCompleted
+
+checkBarrelsComplete:
+  a = verPosMario; //   lda verPosMario
+  cmp(a,YMIN_LEVEL0); //   cmp #YMIN_LEVEL0
+  goto levelNotDone if negative; //   bne .levelNotDone
+
+levelCompleted:
+  a = LEVEL_COMPLETED; //   lda #LEVEL_COMPLETED
+  gameState = a; //   sta gameState
+x = 0x0A; //   ldx #$0A
+  a = 0x05; //   lda #$05
+  PlayMusic(); //   jsr PlayMusic
+
+LF3F1:
+  a = soundDuration; //   lda soundDuration
+  cmp(a,0x05); //   cmp #$05
+  goto levelNotDone if zero; //   beq .levelNotDone
+
+  a = START_NEW_LEVEL; //   lda #START_NEW_LEVEL
+  gameState = a; //   sta gameState
+  a = bonusTimer; //   lda bonusTimer                   ; add bonus timer value to score
+  IncrementScore(); //   jsr IncrementScore
+  a = gameScreen; //   lda gameScreen                   ; get the current game screen
+  a = a ^ 0x01; //   eor #$01                         ; flip between 0 (barrels) and 1 (firefox)
+  gameScreen = a; //   sta gameScreen
+StartNewScreen(); //   jsr StartNewScreen
+
+levelNotDone:
+  a = losingLifeFlag; //lda losingLifeFlag
+  goto doneMovingObstacles if negative; //   bmi .doneMovingObstacles
+
+  a = gameState; //   lda gameState
+  goto doneMovingObstacles if !negative; //   bpl .doneMovingObstacles         ; game not running so branch
+
+  x = holdObstacleNumber; //   ldx holdObstacleNumber
+  a = verPosP1A[x]; //   lda verPosP1,x
+  goto LF450 if negative; //   bne LF450
+  a = gameScreen; //   lda gameScreen
+  goto StartNewFirefox if negative; //   bne StartNewFirefox              ; branch to do firefox
+/*;   
+; doing barrels here
+;
+*/
+  a = verPosP1p1[x]; //   lda verPosP1+1,x
+  cmp(x,0x03); //   cpx #$03
+  goto LF423 if !zero; //   bne LF423
+  a = verPosP1A[0]; //   lda verPosP1
+LF423:
+  y=a; //   tay
+  goto StartNewBarrel if zero; //   beq StartNewBarrel
+  y = 0x23; //   cpy #$23
+  goto LF450 if !carry; //   bcc LF450
+
+StartNewBarrel:
+  a = STARTING_BARREL_VERT; //   lda #STARTING_BARREL_VERT
+  verPosP1A[x] = a; //   sta verPosP1,x
+  a = STARTING_BARREL_HORIZ; //   lda #STARTING_BARREL_HORIZ
+  horPosP1A[x] = a; //   sta horPosP1,x
+  a = OBSTACLE_MOVING_RIGHT; //   lda #OBSTACLE_MOVING_RIGHT
+  directionP1A[x] = a; //   sta directionP1,x
+  goto LF449 if !zero; //   bne LF449
+
+StartNewFirefox:
+  a = randomSeed; //   lda randomSeed
+  a = a & 0x1F; //   and #$1F
+  a = a +# 0x25; //   adc #$25
+  horPosP1A[x] = a; //   sta horPosP1,x                   ; randomly set the horizontal position of the firefox
+a = a & OBSTACLE_MOVING_RIGHT; //   and #OBSTACLE_MOVING_RIGHT
+   directionP1A[x] = a; //sta directionP1,x                ; set the random direction of the firefox
+  a = FirefoxVerPos[x]; //   lda FirefoxVerPos,x
+  verPosP1A[x] = a; //   sta verPosP1,x
+LF449:
+  x--; //   dex
+  goto LF44E if !negative; //   bpl LF44E
+  x = MAX_OBSTACLESm1; //   ldx #MAX_OBSTACLES-1
+LF44E:
+   x = holdObstacleNumber; //stx holdObstacleNumber
+LF450:
+  x = MAX_OBSTACLESm1; //   ldx #MAX_OBSTACLES-1
+  y = 0x01; //   ldy #$01
+  a = frameCount; //   lda frameCount
+  a = a >>> 1; // lsr
+  goto LF45D if !carry; // bcc LF45D                        ; if the frame count is even branch
+
+  x = 0x01;  //ldx #$01
+  y = 0xff; //   ldy #$FF
+LF45D:
+  loopCount = y; //   sty loopCount
+
+MoveObstacleLoop:
+  y = verPosP1A[x]; //   ldy verPosP1,x                   ; if the vertical position of the obstacle
+  goto moveObstacle if !zero; //   bne .moveObstacle                ; is not 0 then move it
+  goto MoveNextObstacle; //   jmp MoveNextObstacle
+
+doneMovingObstacles:
+  goto DoneMovingObstacles; //   jmp DoneMovingObstacles
+
+moveObstacle:
+  a = gameScreen; //   lda gameScreen
+  goto MoveBarrelObject if zero; //   beq MoveBarrelObject             ; branch if this is the barrel screen
+
+/*
+;
+; Moving Firefox sprite
+;
+*/
+  a = rivetsA[x]; //   lda rivits,x
+  cmp(a,LEFT_RIVET_VALUE); //   cmp #LEFT_RIVIT_VALUE            ; check to see if the left rivit was removed
+  goto MoveFirefox if !carry; //   bcc MoveFirefox                  ; if not then give full left motion range
+  cmp(a,RIGHT_RIVET_VALUE); //   cmp #RIGHT_RIVIT_VALUE           ; check to see if the right rivit was removed
+  goto checkLeftRivitConstraint if !carry; //   bcc .checkLeftRivitConstraint
+  a = HORIZ_RIGHT_RIVET; //   lda #HORIZ_RIGHT_RIVIT
+  cmp(a,horPosP1A[x]); //   cmp horPosP1,x
+  goto ChangeFirefoxDirection if zero; //   beq ChangeFirefoxDirection
+  a = rivetsA[x]; //   lda rivits,x
+  cmp(a,COMPLETE_RIVET_WALKWAY); //   cmp #COMPLETE_RIVIT_WALKWAY
+  goto MoveFirefox if !carry; //   bcc MoveFirefox
+
+checkLeftRivitConstraint:
+  a = HORIZ_LEFT_RIVET; //   lda #HORIZ_LEFT_RIVIT
+  cmp(a,horPosP1A[x]); //   cmp horPosP1,x
+  goto MoveFirefox if !zero; //   bne MoveFirefox
+
+ChangeFirefoxDirection:
+  a = directionP1A[x]; //   lda directionP1,x
+  a = a ^ 0x01; //   eor #$01
+  directionP1A[x] = a; //   sta directionP1,x
+
+MoveFirefox:
+  a = directionP1A[x]; //   lda directionP1,x                ; moving left then branch
+  goto moveFirefoxLeft if zero; //   beq .moveFirefoxLeft
+horPosP1A[x]++; //   inc horPosP1,x
+  a = XMAX_LEVEL1; //   lda #XMAX_LEVEL1
+  cmp(a,horPosP1A[x]); //   cmp horPosP1,x                   ; is the firefox at the right most pixel
+  goto changeDirection if !carry; //   bcc .changeDirection             ; if so then change it's direction
+  goto computeRandomDirection if carry; //   bcs .computeRandomDirection
+
+moveFirefoxLeft:
+  horPosP1A[x]--; //   dec horPosP1,x
+  a = XMIN_LEVEL1; //   lda #XMIN_LEVEL1
+  cmp(a,horPosP1A[x]); //   cmp horPosP1,x                   ; is the firefox at the left most pixel
+  goto changeDirection if carry; //   bcs .changeDirection             ; if so then change it's direction
+
+computeRandomDirection:
+  a = randomSeed; //   lda randomSeed
+  cmp(a,0x02); //   cmp #$02                         ; if the seed is less than 2
+  goto skipRandomDirection if !carry; //   bcc .skipRandomDirection         ; then skip random firefox direction
+  y = playerScore; // ldy playerScore                  ; use player's score as an index
+  cmp(a,LF900[y]); // cmp LF900,y                      ; compare the random seed with the number table
+  goto doneMovingCurrentFirefox if carry; // bcs .doneMovingCurrentFirefox    ; if >= then don't change directions
+  a = LF900[y]; // lda LF900,y                      ; store the number table value
+  randomSeed = a; // sta randomSeed                   ; in the randomSeed
+
+changeDirection:
+  a = directionP1A[x]; //   lda directionP1,x
+  a = a ^ 0x01; //   eor #$01
+  y = a; //   tay
+  goto setFirefoxDirection if !negative; //   bpl .setFirefoxDirection         ; unconditional branch
+
+skipRandomDirection:
+  a = verPosP1A[x]; //   lda verPosP1,x                   ; get the vertical position of the firefox
+  carry = false; //   clc
+  a = a +# FAIR_PIXEL_DELTA; //   adc #FAIR_PIXEL_DELTA            ; if the difference between the vertical position
+  cmp(a,verPosMario); // cmp verPosMario                  ; and Mario is not between FAIR_PIXEL_DELTA then
+  goto doneMovingCurrentFirefox if !zero; // bne .doneMovingCurrentFirefox    ; finish firefox movement
+
+  y = OBSTACLE_MOVING_LEFT; // ldy #OBSTACLE_MOVING_LEFT
+  a = horPosP1A[x]; //   lda horPosP1,x                   ; if the firefox is to the right of Mario
+  cmp(a,horPosMario); // cmp horPosMario                  ; then move the firefox left
+  goto setFirefoxDirection if carry; //   bcs .setFirefoxDirection         ; if the firefox is to the left of Mario
+  y = OBSTACLE_MOVING_RIGHT; // ldy #OBSTACLE_MOVING_RIGHT       ; then more the firefox right
+     
+setFirefoxDirection:
+  directionP1A[x] = y; //   sty directionP1,x
+doneMovingCurrentFirefox:
+  goto MoveNextObstacle; //   jmp MoveNextObstacle
+
+  #[fallthrough] func MoveBarrelObject() { //SUBROUTINE
+    a =directionP1A[x]; //   lda directionP1,x
+    }
+  goto moveBarrelLeft if zero; //   beq .moveBarrelLeft              ; barrel moving left
+  goto moveBarrelDown if negative; //   bmi .moveBarrelDown              ; barrel falling down
+barrelMovingRight:
+  horPosP1A[x]++; //   inc horPosP1,x                   ; increment barrel horiz position
+  goto BarrelRampMovement if !zero; //   bne BarrelRampMovement           ; same as jmp but saves a byte (never 0)
+
+moveBarrelLeft:
+  horPosP1A[x]--; //   dec horPosP1,x                   ; decrement barrel horiz position
+
+BarrelRampMovement:
+  cmp(y,TOP_PLATFORM_VALUE); //   cpy #TOP_PLATFORM_VALUE          ; if the barrel is on the top platform then
+  goto doneBarrelRampMovement if zero; //   beq .doneBarrelRampMovement      ; branch -- no ramps there
+  cmp(y,BOTTOM_BARREL_PLATFORM_VALUE); //   cpy #BOTTOM_BARREL_PLATFORM_VALUE; if the barrel is on the bottom platform then
+  goto checkBarrelDone if zero; // beq .checkBarrelDone             ; branch -- no ramps
+  y = horPosP1A[x]; //  ldy horPosP1,x                   ; get the horizontal position of the barrel
+  a = a << 1; // asl
+  goto LF4F0 if !zero; //    bne LF4F0                        ; branch if not moving left
+  y++; //   iny
+LF4F0:
+  a = y; //   tya
+  y = 0x07; //   ldy #$07
+rampLoop:
+  y--; //   dey
+  goto doneBarrelRampMovement if negative; //   bmi .doneBarrelRampMovement
+  cmp(a,RampHorizValues[y]); //   cmp RampHorizValues,y            ; if the barrel horiz position is less than
+  goto doneBarrelRampMovement if !carry; //   bcc .doneBarrelRampMovement      ; the table value then branch
+  goto rampLoop if !zero; //   bne .rampLoop
+  verPosP1A[x]++; //   inc verPosP1,x                   ; move barrel down the ramp
+
+doneBarrelRampMovement:
+  y = playerScore; //   ldy playerScore
+  a = randomSeed; //   lda randomSeed
+  cmp(a,LF900[y]); //   cmp LF900,y
+  y = 0x0C; //   ldy #$0C
+  goto LF50C if carry; //   bcs LF50C
+  y = 0xFF; //   ldy #$FF
+LF50C:
+  a = verPosP1p1[x]; //   lda verPosP1+1,x
+  cmp(x,0x03); //   cpx #$03
+  goto LF514 if !zero; //   bne LF514
+  a = verPosP1; //   lda verPosP1
+LF514:
+  a = obstacleOffset; //   sta obstacleOffset
+LF516:
+  a = obstacleOffset; //   lda obstacleOffset
+  a = a -# verPosP1A[x]; //   sbc verPosP1,x
+LF51A:
+  y++; //   iny
+  cmp(y,0x12); //   cpy #$12
+  goto MoveNextObstacle if carry; //   bcs MoveNextObstacle
+  cmp(a,LFC50[y]); //   cmp LFC50,y
+     
+ goto LF51A if !carry; //   bcc LF51A
+ a = horPosP1A[x]; //   lda horPosP1,x
+ a = a -# 0x01; // sbc #$01
+     
+ cmp(a, LadderHorizValues[y]); // cmp LadderHorizValues,y
+  goto LF516 if !zero; //   bne LF516
+
+  a = DownLadderTable[y] ; // lda DownLadderTable,y
+  carry = true; //   sec
+  a = a -# FAIR_PIXEL_DELTA; //   sbc #FAIR_PIXEL_DELTA
+  cmp(a,verPosP1A[x]); //   cmp verPosP1,x
+  goto LF516 if !zero; //   bne LF516
+  barrelLadderNumberA[x] = y; //   sty barrelLadderNumber,x
+  a = directionP1A[x]; //   lda directionP1,x
+  a = a | OBSTACLE_MOVING_DOWN; //   ora #OBSTACLE_MOVING_DOWN
+  goto setBarrelDirection if negative; //   bmi .setBarrelDirection
+
+moveBarrelDown:
+  verPosP1A[x]++;//   inc verPosP1,x
+  verPosP1A[x]++; //   inc verPosP1,x
+  y = barrelLadderNumberA[x];  //   ldy barrelLadderNumber,x
+  a = UpLadderTable[y]; //   lda UpLadderTable,y
+
+  carry = true; // sec
+  a = a -# FAIR_PIXEL_DELTA;  //   sbc #FAIR_PIXEL_DELTA
+  cmp(a,verPosP1A[x]); // cmp verPosP1,x
+     
+  goto LF551 if zero; //   beq LF551
+  goto MoveNextObstacle if carry; //   bcs MoveNextObstacle
+
+LF551:
+  verPosP1A[x] = a; //   sta verPosP1,x
+  a = directionP1A[x];  //   lda directionP1,x
+  a = a ^ (OBSTACLE_MOVING_DOWN | OBSTACLE_MOVING_RIGHT); //   eor #OBSTACLE_MOVING_DOWN | OBSTACLE_MOVING_RIGHT
+
+setBarrelDirection:
+  directionP1A[x] = a; //   sta directionP1,x
+  goto MoveNextObstacle; //   jmp MoveNextObstacle
+
+checkBarrelDone:
+  a = horPosP1A[x]; //   lda horPosP1,x
+  cmp(a, (XMIN_LEVEL1 - 1));  //   cmp #XMIN_LEVEL1-1               ; if the barrel is not finished (off the screen)
+  goto MoveNextObstacle if !zero; //  bne MoveNextObstacle             ; then move the next barrel
+ a = 0x00; // lda #$00                         ; reset the vertical position of the barrel so
+  verPosP1A[x] = a; //sta verPosP1,x                   ; it can be reused
+
+MoveNextObstacle:
+  x--; //   dex
+  cmp(x,loopCount); //   cpx loopCount
+  goto DoneMovingObstacles if zero; //   beq DoneMovingObstacles
+  goto MoveObstacleLoop; //   jmp MoveObstacleLoop
+
+DoneMovingObstacles:
+  x=(MAX_OBSTACLES - 1); //   ldx #MAX_OBSTACLES-1
+LF570:
+  y = FALLING_BARREL_SPRITE_NUMBER; //   ldy #FALLING_BARREL_SPRITE_NUMBER
+  a = verPosP1A[x];  //   lda verPosP1,x                   ; check to see if the obstacle is there
+  goto gotoNextObstacle if zero; //   beq .gotoNextObstacle            ; if not then branch
+  a = directionP1A[x]; //lda directionP1,x                ; if the barrel is not falling down a ladder
+  goto setRollingBarrelSprite if !negative; // bpl .setRollingBarrelSprite      ; then change the sprite to the barrel sprite
+
+  a = barrelLadderNumberA[x]; // lda barrelLadderNumber,x
+  cmp(a,0x0D); //   cmp #$0D
+  goto LF585 if !carry; //   bcc LF585
+  cmp(a,verPosMario); //   cmp verPosMario
+  goto removeObstacle if carry; //   bcs .removeObstacle
+  
+setRollingBarrelSprite:
+  y--; //   dey                              ; y = 0 -or- BARREL_SPRITE_NUMBER
+LF585:
+  a = gameScreen; //   lda gameScreen
+  goto LF58B if zero; //   beq LF58B
+  y = FIREFOX_SPRITE_NUMBER; //   ldy #FIREFOX_SPRITE_NUMBER
+LF58B:
+  a = verPosP1A[x]; //   lda verPosP1,x
+  obstacleNumber = x; //   stx obstacleNumber
+  x = (NUM_WALKWAYS + 1 ); //   ldx #NUM_WALKWAYS+1       
+  carry = true; //   sec
+walkwayLoop2:
+  x--; //   dex
+  a = a -# (WALKWAY_HEIGHT + 1);  //   sbc #WALKWAY_HEIGHT+1
+  goto walkwayLoop2 if carry; //   bcs .walkwayLoop
+  a = a +# (WALKWAY_HEIGHT + 1);//   adc #WALKWAY_HEIGHT+1
+  cmp(x,HAMMER_GROUP); //   cpx #HAMMER_GROUP                ; if the obstacle is not on a hammer
+  goto calculateObstaclePointers if !zero; //   bne .calculateObstaclePointers   ; walkway then compute pointers
+  CXP1FB = CXP1FB << 1 ; //   asl CXP1FB                       ; check if the obstacle was hit by the hammer
+  goto calculateObstaclePointers if !negative; // bpl .calculateObstaclePointers   ; obstacle not hit -- compute pointers
+
+  a = SMASHING_OBSTACLE; // lda #SMASHING_OBSTACLE           ; add the smashing score to the player's
+  IncrementScore(); // jsr IncrementScore               ; score
+  x = obstacleNumber; // ldx obstacleNumber
+
+removeObstacle:
+  a = 0x00; //   lda #$00
+  verPosP1A[x] = a; //   sta verPosP1,x                   ; clear the verPos of the obstacle
+gotoNextObstacle:
+  goto NextObstacle if zero; //   beq NextObstacle                 ; same as jmp -- saves a byte
+     
+
+calculateObstaclePointers:
+  a = obstacleOffset; //   sta obstacleOffset
+  carry = false; //   clc
+  a = a +# ObstacleTable[y];   //   adc ObstacleTable,y
+  obstaclePointerLSB[x] = a; //   sta obstaclePointerLSB,x
+  a = obstacleOffset; //   lda obstacleOffset
+  cmp(a,0x12); // cmp #$12
+  goto StoreObstaclePosition if !carry; // bcc StoreObstaclePosition
+   barrelLadderNumberAP3[x] = barrelLadderNumberAP3[x] >>>># 1; //   ror barrelLadderNumber+3,x
+  cmp(a,0x13); //   cmp #$13
+  goto StoreObstaclePosition if !carry; //   bcc StoreObstaclePosition
+  a = x; //   txa
+  goto StoreObstaclePosition if zero; //   beq StoreObstaclePosition
+  a = obstaclePointerLSB[x]; //   lda obstaclePointerLSB,x
+  a = a -# (WALKWAY_HEIGHT+1); //   sbc #WALKWAY_HEIGHT+1
+  obstaclePointerLSB[x] =a; //   sta obstaclePointerLSB-1,x
+/*
+;
+; the horizontal motion values are stored in RAM for each obstacle to save time
+; in the kernel
+;
+*/
+#[fallthrough] func StoreObstaclePosition() { //StoreObstaclePosition SUBROUTINE
+  y = obstacleNumber; //   ldy obstacleNumber
+  a = horPosP1A[y]; //   lda horPosP1,y
+  y = 0xFD; //   ldy #$FD
+  carry = true; //   sec
+  }
+  
+coarseMoveLoop:
+  y++; //   iny
+  a = a -# 0x0F; //   sbc #$0F
+  goto coarseMoveLoop if carry; //   bcs .coarseMoveLoop
+  coarseHorPosP1A[x] = y; //   sty coarseHorPosP1,x
+  a = a ^ 0x0F; //   eor #$0F
+  a = a << 1; // asl
+  a = a << 1; // asl
+  a = a << 1; // asl
+  a = a << 1; // asl
+  a = a +# HMOVE_R7; //   adc #HMOVE_R7
+  fineHorPosP1A[x] = a; //   sta fineHorPosP1,x
+  x = obstacleNumber; //   ldx obstacleNumber
+
+NextObstacle:
+  x--; //   dex
+  goto CheckToPlayDeathSound if negative; //   bmi CheckToPlayDeathSound
+  goto LF570; //   jmp LF570
+
+CheckToPlayDeathSound:
+  a = losingLifeFlag; //   lda losingLifeFlag
+  goto continueDeathSound if negative; //   bmi .continueDeathSound
+  a = CXPPMM; //   lda CXPPMM
+  goto clearCollisions if !negative; //   bpl .clearCollisions
+  
+  PlayDeathSound(); //   jsr PlayDeathSound
+  in rom @ ROMADDR + 0x5F7 {
+continueDeathSound:
+  a = soundDuration; //   lda soundDuration
+  cmp(a,0x04); //   cmp #$04
+  goto clearCollisions if zero; //   beq .clearCollisions
+  a = 0x00; //   lda #$00
+  losingLifeFlag = a; //   sta losingLifeFlag
+
+  StartNewScreen(); // jsr StartNewScreen
+
+  y = START_NEW_LEVEL; // ldy #START_NEW_LEVEL
+  numberOfLives--; //   dec numberOfLives
+  goto setGameState if !negative; // bpl .setGameState
+
+  PlayGameOverMusic(); // jsr PlayGameOverMusic
+
+  y = GAME_OVER; // ldy #GAME_OVER
+  numberOfLives = y; //   sty numberOfLives
+
+setGameState:
+    gameState = y; //   sty gameState
+
+
+clearCollisions:
+  a = 0xff; //   lda #$FF
+  CXCLR = a; //   sta CXCLR
+  SetupKernelJumpVector(); //   jsr SetupKernelJumpVector
+    x = 0x03; //   ldx #$03
+    a = horPosHammer; //   lda horPosHammer
+
+   PositionHammer(); //jsr PositionHammer
+/*
+   ldy #$10                         ; ball size 2 clocks
+   ldx #$20                         ; ball size 4 clocks
+   lda missilePointer
+   cmp #<MallotAnimation2
+   beq LF638
+
+   lda gameScreen
+   beq LF630
+   inx                              ; reflect the firefox playfield
+   */
+  }
+  /*
+LF630:
+   stx CTRLPF
+   sty missile1Size                 ; used in the kernel
+   lda #$FF
+   bne LF649
+LF638:
+   stx missile1Size
+   lda gameScreen
+   beq LF63F
+   iny                              ; reflect the firefox playfield
+LF63F:
+   sty CTRLPF
+   lda #$FE
+   ldy marioDirection
+   beq LF649
+   lda #$04
+LF649:
+   clc
+   adc horPosHammer
+   ldx #$04
+   jsr PositionHammer
+
+DisplayKernel SUBROUTINE
+.waitTime
+   ldx INTIM
+   bne .waitTime
+
+   stx WSYNC
+;--------------------------------------
+   stx VBLANK                 ; 3         stop vertical blanking (enable TIA)
+   stx REFP0                  ; 3         don't reflect player0
+   stx REFP1                  ; 3         don't reflect player1
+   inx                        ; 2         x = 1
+   stx VDELP0                 ; 3         vertical delay GRP0 and GRP1 setting up for
+   stx VDELP1                 ; 3         the 6 digit display
+
+   ldx #THREE_COPIES          ; 2
+   stx NUSIZ0                 ; 3
+   stx NUSIZ1                 ; 3
+   nop                        ; 2
+   ldy #HMOVE_R7              ; 2
+   sty HMP0                   ; 3 = @32   move GRP0 right 7 pixels
+   ldy #NUMBER_HEIGHT         ; 2
+   sta RESP0                  ; 3 = @37   coarse position GRP0 @ pixel 111
+   ldx #BLUE                  ; 2
+   sta RESP1                  ; 3 = @42   coarse position GRP1 @ pixel 126
+   lda gameState              ; 3         get the current game state
+   asl                        ; 2         shift D7 to the carry bit
+   bcc .colorDigits           ; 2³        carry clear -- game in progress
+   ldx #LIGHT_GREEN           ; 2         bonus timer color
+.colorDigits
+   stx COLUP0                 ; 3
+   stx COLUP1                 ; 3
+
+   sta WSYNC
+;--------------------------------------
+   sta HMOVE                  ; 3         move the players horizontally
+.drawDigits   
+   lda NumberFonts,y          ; 4         this puts the zero on the back end of
+   sta digitPointer+8         ; 3         the score
+   sta WSYNC
+;--------------------------------------
+   lda (digitPointer+6),y     ; 5
+   sta GRP0                   ; 3 = @8
+   lda (digitPointer+4),y     ; 5
+   sta GRP1                   ; 3 = @16
+   lda (digitPointer+2),y     ; 5
+   sta.w GRP0                 ; 4 = @25
+   lda (digitPointer),y       ; 5
+   tax                        ; 2
+   lda NumberFonts,y          ; 4
+   sty loopCount              ; 3
+   ldy digitPointer+8         ; 3
+   stx GRP1                   ; 3 = @45
+   sta GRP0                   ; 3 = @48
+   sty GRP1                   ; 3 = @51
+   sty GRP0                   ; 3 = @54
+   ldy loopCount              ; 3
+   dey                        ; 2
+   bpl .drawDigits            ; 2³
+
+   stx WSYNC
+;--------------------------------------
+   sta HMCLR                  ; 3 = @3       clear all horizontal movements
+   ldx #$00                   ; 2
+   stx VDELP0                 ; 3 = @8       turn off vertical delay of GRP0 and 
+   stx VDELP1                 ; 3 = @11      GRP1
+   stx GRP0                   ; 3 = @14      disable player graphics to avoid
+   stx GRP1                   ; 3 = @17      bleeding into current scan line
+   stx NUSIZ1                 ; 3 = @20      single pixel res for GRP1
+   ldx #PLAYER_HEIGHT         ; 2
+   lda playfieldColor         ; 3
+   sta COLUPF                 ; 3 = @28      color the playfield -- outside of
+                              ;              HBLANK but okay
+   sta RESP0-PLAYER_HEIGHT,x  ; 4 = @32      wastes a cycle but saves a byte from
+                              ;              sta.w RESP0
+   lda marioDirection         ; 3
+   bpl .setMarioReflectState  ; 2³
+
+   lda verPosMario            ; 3
+   and #$04                   ; 2
+   asl                        ; 2
+
+.setMarioReflectState
+   sta REFP0                  ; 3
+   lda #DOUBLE_SIZE           ; 2
+   sta NUSIZ0                 ; 3            make Donkey Kong double size
+   lda #BROWN                 ; 2
+   sta COLUP0                 ; 3            color Donkey Kong
+   lda #>ObstacleSprites      ; 2            set the MSB for the obstacles
+   sta obstaclePointer+1      ; 3
+   ldy numberOfLives          ; 3
+
+.drawDonkeyKongLoop
+   lda DonkeyKong-1,x           ; 4
+   sta WSYNC
+;--------------------------------------
+   sta GRP0                   ; 3 = @3       draw Donkey Kong character
+   lda #$00                   ; 2
+   sta PF1                    ; 3 = @8       clear the PF1 register
+   lda Girlfriend-1,x         ; 4
+   sta GRP1                   ; 3 = @15      draw girlfriend character
+   lda GirlfriendColors-2,x   ; 4
+   sta COLUP1                 ; 3 = @22      color girfriend character
+   cpx #$0D                   ; 2
+   bcs .nextX                 ; 2³
+   cpx #$05                   ; 2
+   bcc .nextX                 ; 2³
+   lda BarrelPFDataTable-5,x  ; 4
+   sta rightPF1Pointer-5,x    ; 4
+   lda LivesPFPattern,y       ; 4
+   sta PF1                    ; 3 = @45      draw lives indicators
+.nextX
+   dex                        ; 2
+   bne .drawDonkeyKongLoop    ; 2³
+
+   stx NUSIZ0                 ; 3            x = 0
+   lda missile1Size           ; 3
+   sta NUSIZ1                 ; 3
+   lda frameCount             ; 3
+   sta REFP1                  ; 3
+   ldy #$01                   ; 2
+
+.drawDonkeyKongPlatform
+   stx PF1                    ; 3            clear the playfield registers to
+   stx PF2                    ; 3            avoid bleeding on next scan line
+   sta WSYNC
+;--------------------------------------
+   lda #$0F                   ; 2
+   sta PF1                    ; 3 = @5
+   lda #$FF                   ; 2
+   sta PF2                    ; 3 = @10
+   ldx #$06                   ; 2
+   lda gameScreen             ; 3            get the current game screen
+   beq .zeroXLoop             ; 2³           branch if the barrel level
+   ldx rivits+3               ; 3 = @20
+   lda FireFoxLeftPF1Table,x  ; 4
+   sta leftPF1Pointer         ; 3
+   lda FireFoxPF2Table,x      ; 4
+   sta pf2Pointer             ; 3
+   lda FireFoxPF0Table,x      ; 4
+   sta pf0Pointer             ; 3
+   lda #>InitializationTable1                ; 2
+   sta leftPF1Pointer+1       ; 3
+   sta pf2Pointer+1           ; 3
+   sta pf0Pointer+1           ; 3
+   ldx #$01                   ; 2
+   stx REFP1                  ; 3
+.zeroXLoop
+   dex                        ; 2
+   bne .zeroXLoop             ; 2³
+   dey                        ; 2
+   bpl .drawDonkeyKongPlatform; 2³
+
+   stx PF1                    ; 3
+   stx PF2                    ; 3
+   sec                        ; 2
+   sta WSYNC
+;--------------------------------------
+   lda horPosMario            ; 3
+.coarseMoveMario
+   sbc #$0F
+   bcs .coarseMoveMario
+   eor #$0F
+   asl
+   asl
+   asl
+   asl
+   adc #HMOVE_R7
+   sta RESP0
+   sta HMP0
+   lda #RED_2                       ; it seems they forgot about this in the PAL
+   sta COLUP0                       ; translation -- it's the same value as NTSC
+   lda verPosMario
+   sta WSYNC
+;--------------------------------------
+   sta HMOVE                  ; 3
+   cmp #$0F                   ; 2
+   bcs .skipMarioDraw         ; 2³
+   ldy #$1C                   ; 2            first byte of Mario sprite
+   bne .drawMario             ; 2³
+.skipMarioDraw
+   ldy #$00                   ; 2
+   nop                        ; 2
+.drawMario
+   sty GRP0                   ; 3 = @15
+   lda fineHorPosP1+5         ; 3
+   ldy coarseHorPosP1+5       ; 3
+LF782:
+   dey                        ; 2
+   bpl LF782                  ; 2³
+   ldy #WALKWAY_HEIGHT        ; 2
+   nop                        ; 2
+   sta RESP1                  ; 3
+   sta HMP1                   ; 3
+   stx HMP0                   ; 3            clear player 0 horizontal movement (x = 0)
+   lda #>MarioColors          ; 2
+   sta marioColorPointer+1    ; 3
+   sta WSYNC
+;--------------------------------------
+   sta HMOVE                  ; 3
+   bcc .drawMario_a           ; 2³
+   bcs .skipMarioDraw_a       ; 2²
+.drawMario_a
+   ldx #$7E                   ; 2            second byte of Mario sprite
+
+.skipMarioDraw_a
+   stx VSYNC,y                ; 4 = @12      waste a cycle and store the byte in GRP0 (y = #$1B)
+   ldx #NUM_WALKWAYS+1        ; 2
+   jmp EnterKernel            ; 3
+
+;
+; I'm not sure what the following byte is used for. Tracing the program shows that
+; this bytes is never accessed. They're here to make the compiled ROM identical to
+; the cart.
+;
+   IF NTSC
+
+   .byte $9D
+
+   ELSE
+
+   brk
+
+   ENDIF
+
+EndKernel
+   jmp MainLoop
+
+BarrelHammerKernel SUBROUTINE
+   stx PF2                    ; 3 = @58
+   */
+in rom @ ROMADDR + 0x7A9 {
+JumpBarrelHammerKernel:
+  a = (marioColorPointer as *u8)[y];//   lda (marioColorPointer),y  ; 5
+  PF1 = x; //   stx PF1                    ; 3            clear the playfield registers (x = 0)
+  goto skipMarioDraw if zero;//   beq .skipMarioDraw         ; 2³
+  zpMarioGraphics[y] = x; //   ldx zpMarioGraphics,y      ; 4
+}
+     /*
+
+.skipMarioDraw
+   sta WSYNC
+;--------------------------------------
+   sta COLUP0                 ; 3
+   lda (missilePointer),y     ; 5
+   sta ENAM1                  ; 3 = @11
+   lda (ballPointer),y        ; 5
+   sta ENABL                  ; 3 = @19
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @27
+   stx GRP0                   ; 3 = @30
+   lda (pf2Pointer),y         ; 5
+   sta PF2                    ; 3 = @38
+   lda (rightPF1Pointer),y    ; 5
+   ldx #$00                   ; 2
+   sta PF1                    ; 3 = @48
+   dey                        ; 2
+   cpy #WALKWAY_HEIGHT - HAMMER_HEIGHT ; 2
+   bcs BarrelHammerKernel     ; 2³
+
+BarrelKernel SUBROUTINE
+   stx PF2                    ; 3
+   lda (marioColorPointer),y  ; 5
+   stx PF0                    ; 3 = @65
+*/
+JumpBarrelKernel:
+  goto skipMarioDraw if zero; //   beq .skipMarioDraw         ; 2³
+  zpMarioGraphics[y] = x; //   ldx zpMarioGraphics,y      ; 4
+/*
+.skipMarioDraw
+   sta WSYNC
+;--------------------------------------
+   sta COLUP0                 ; 3 = @3
+   stx GRP0                   ; 3 = @6
+   ldx #$00                   ; 2
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @16
+   lda (leftPF1Pointer),y     ; 5
+   sta PF1                    ; 3 = @24
+   lda (pf2Pointer),y         ; 5
+   sta PF2                    ; 3 = @32
+   lda (pf0Pointer),y         ; 5
+   sta PF0                    ; 3 = @40
+   lda (rightPF1Pointer),y    ; 5
+   sta PF1                    ; 3 = @48
+   dey                        ; 2
+   cpy loopCount              ; 3
+   bne BarrelKernel           ; 2³
+
+ContinueKernel SUBROUTINE
+   lda (marioColorPointer),y  ; 5
+   stx PF2                    ; 3 = @63
+   sta COLUP0,x               ; 4 = @67
+   bne .drawMario             ; 2³
+   sta GRP0,x                 ; 4 = @73
+   beq .skipMarioDraw         ; 3
+.drawMario
+   lda zpMarioGraphics+2      ; 3
+   sta GRP0                   ; 3 = @76
+;--------------------------------------
+.skipMarioDraw
+   stx PF1                    ; 3 = @3
+   stx PF0                    ; 3 = @6
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @14
+   ldx groupCount             ; 3
+   beq EndKernel              ; 2³
+   ldy coarseHorPosP1-1,x     ; 4
+   bmi SkipObstacleMove       ; 2³
+.coarseMoveObstacle
+   dey                        ; 2
+   bpl .coarseMoveObstacle    ; 2³
+   sta RESP1                  ; 3
+   lda fineHorPosP1-1,x       ; 4
+   sta HMP1                   ; 3
+
+SkipObstacleMove SUBROUTINE
+   ldy #$01                   ; 2
+   sta WSYNC
+;--------------------------------------
+   sta HMOVE                  ; 3
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @11
+   lda (marioColorPointer),y  ; 5
+   sta.w COLUP0               ; 4 = @20
+   bne .drawMario             ; 2³
+   sta.w GRP0                 ; 4 = @26
+   beq .skipMarioDraw         ; 3            always 0
+.drawMario
+   lda zpMarioGraphics+1      ; 3
+   sta GRP0                   ; 3 = @29
+.skipMarioDraw
+   lda gameScreen             ; 3
+   beq .loadBarrelPFPointers  ; 2³
+
+   ldy rivits-3,x             ; 4 = @38
+   lda FireFoxLeftPF1Table,y  ; 4
+   sta leftPF1Pointer         ; 3
+   lda FireFoxPF2Table,y      ; 4
+   sta pf2Pointer             ; 3
+   lda FireFoxPF0Table,y      ; 4
+   ldy #$00                   ; 2
+   sta pf0Pointer,y           ; 5 = @63
+   beq .skipBarrelPFPointers  ; 2³
+.loadBarrelPFPointers
+   lda BarrelLeftPF1Table-1,x   ; 4 = @39
+   sta leftPF1Pointer         ; 3
+   lda BarrelPF2Table,x       ; 4
+   sta pf2Pointer             ; 3
+   lda BarrelPF0Table,x       ; 4
+   sta pf0Pointer             ; 3
+   lda BarrelRightPF1Table,x  ; 4
+   sta rightPF1Pointer        ; 3
+   dey                        ; 2 = @65
+.skipBarrelPFPointers
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @73 (barrels) @74(firefox)
+   lda (marioColorPointer),y  ; 5
+;--------------------------------------
+   sta.w COLUP0               ; 4 = @5 (barrles) @6(firefox)
+   bne .drawMario_a           ; 2³
+   sta.w GRP0                 ; 4 = @11 (barrels) @12 (firefox)
+   beq .skipDrawMario_a       ; 3
+.drawMario_a
+   lda zpMarioGraphics        ; 3
+   sta GRP0                   ; 3 = @14 (barrels) @15 (firefox)
+.skipDrawMario_a
+   ldy #WALKWAY_HEIGHT        ; 2
+
+EnterKernel
+   lda obstaclePointerLSB-1,x                  ; 4
+   sta obstaclePointer        ; 3
+
+   lda marioColorPointerLSB-1,x                  ; 4
+   sta marioColorPointer      ; 3
+   sta HMCLR                  ; 3   clear horizontal movement
+   dex                        ; 2
+   nop                        ; 2
+   stx groupCount             ; 3
+   cpx #HAMMER_GROUP          ; 2
+   bne .skipHammerKernel      ; 2³
+   ldx #$00                   ; 2
+   jmp (hammerKernelVector)   ; 5
+
+.skipHammerKernel
+   lda LoopCountTable,x       ; 4
+   sta loopCount              ; 3
+   ldx #$00                   ; 2
+   lda (marioColorPointer),y  ; 5
+   jmp (kernelVector)         ; 5
+
+*/
+#[fallthrough] func FirefoxHammerKernel() { // SUBROUTINE
+  nop(); //   nop                        ; 2 = @54
+  a = (marioColorPointer as *u8)[y]; //   lda (marioColorPointer),y  ; 5
+  goto drawMario if !zero; //   bne .drawMario             ; 2³
+  nop(); //   nop                        ; 2
+  goto skipMarioDraw if zero; //   beq .skipMarioDraw         ; 2³
+  }
+  
+drawMario:
+  x = zpMarioGraphics[y]; //   ldx zpMarioGraphics,y      ; 4
+  /*
+.skipMarioDraw
+   sta COLUP0                 ; 3 = @69
+   lda FireFoxLeftPF2Data_1,y ; 4
+   sta PF2                    ; 3
+;--------------------------------------
+   stx GRP0                   ; 3 = @3
+   lda (missilePointer),y     ; 5
+   sta ENAM1                  ; 3 = @11
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @19
+   lda (ballPointer),y        ; 5
+   sta ENABL                  ; 3 = @27
+   lda FireFoxLeftPF1Data_1-3,y ; 4
+   sta PF1                    ; 3 = @34
+   lda (marioColorPointer),y  ; 5
+   lda marioColorPointer,y    ; 4
+   ldx #$00                   ; 2
+   dey                        ; 2
+   cpy #WALKWAY_HEIGHT - HAMMER_HEIGHT  ; 2
+   bcs FirefoxHammerKernel    ; 2³
+
+FirefoxKernel SUBROUTINE
+   lda (marioColorPointer),y  ; 5
+*/
+JumpFirefoxKernel:
+  goto skipMarioDraw if zero; //   beq .skipMarioDraw         ; 2³
+  x = zpMarioGraphics[y]; //   ldx zpMarioGraphics,y      ; 4
+skipMarioDraw:
+  WSYNC = a; //   sta WSYNC
+/*;--------------------------------------
+   sta COLUP0                 ; 3 = @3
+   stx GRP0                   ; 3 = @6
+   lda (obstaclePointer),y    ; 5
+   sta GRP1                   ; 3 = @14
+   lda (leftPF1Pointer),y     ; 5
+   sta PF1                    ; 3 = @22
+   lda (pf2Pointer),y         ; 5
+   sta PF2                    ; 3 = @30
+   ldx #$00                   ; 2
+   lda (pf0Pointer),y         ; 5
+   lda (pf0Pointer),y         ; 5
+   dey                        ; 2
+   cpy loopCount              ; 3
+   sta PF2                    ; 3 = @50
+   bne FirefoxKernel          ; 2³
+   jmp ContinueKernel         ; 3
+*/
+const  LF900 @ ROMADDR + 0x900: [u8] = [
+  0x30,0x50,0x70,0x90,0xB0,0xD0,0xD0,0xD0,0xFF,0xFF
+  ];
+
+//;===============================================================================
+//; R O M - C O D E (Part 2)
+//;===============================================================================
+  in rom @ ROMADDR + 0x90A {
+#[fallthrough] func DetermineLadderMovement() {
+  y = ladderNumber; //   ldy ladderNumber
+
+  a = verPosMario; //   lda verPosMario
+  cmp(a,UpLadderTable[y]); //cmp UpLadderTable,y
+  goto allowVerticalMovement if zero; //   beq .allowVerticalMovement
+  cmp(a,DownLadderTable[y]); //   cmp DownLadderTable,y
+  goto allowVerticalMovement if zero; //   beq .allowVerticalMovement
+  carry = true; //   sec
+  return;//   rts
+  allowVerticalMovement:
+  carry = false; //   clc
+  return;//   rts
+}
+    
+  }
+SetupKernelJumpVector:
+  a = gameScreen; //   lda gameScreen                         ; get the current game screen
+  
+  a = a << 1; // asl
+a = a << 1; //   asl
+  a = a +#0x03; //   adc #$03                               ; a = 3 for barrels and 7 for firefox
+    x = a; //   tax
+  y = 0x03; //   ldy #$03
+vectorLoadLoop:
+  a = KernelVectorTable[x]; ////   lda KernelVectorTable,x
+  hammerKernelVector[y] = a; //   sta hammerKernelVector,y
+  x--;//   dex
+  y--;//   dey
+  goto vectorLoadLoop if !negative; //   bpl .vectorLoadLoop
+x = 0x0A; //   ldx #$0A
+  y = 0x00; //   ldy #$00
+  a = gameState; //   lda gameState
+  goto BCD2DigitPtrs if !negative; //   bpl BCD2DigitPtrs
+  y = (&bonusTimer as u8 - &playerScorem1 as u8); //   ldy #bonusTimer - playerScore - 1      ; set y to have an offset to the number of lives
+/*
+;---------------------------------------------------------------BCD2DigitPtrs
+;
+; Garry uses y as an offset to load the value he is going to display. If the
+; game is in progress then he is going to show the timer bonus. That's why y
+; is set to #$1C here.
+;
+; Notice that the offset of #$1C is the number of lives. The number of lives
+; will never be greater than 15 so when he masks the upper nibble, it will
+; always be 0.
+;
+*/
+BCD2DigitPtrs:
+  a = playerScoreA[y]; //   lda playerScore,y
+  a = a & 0xF0; //   and #$F0
+   a = a >>> 1;  //   lsr 
+  a = a +# 0x00; //   adc #$00
+  digitPointerm4[x] = a; //   sta digitPointer-4,x
+  a = >:(&NumberFonts as u16); //   lda #>NumberFonts
+  digitPointerm3[x] = a; //   sta digitPointer-3,x
+  x--; //   dex
+  x--; //   dex
+  a = playerScoreA[y]; //   lda playerScore,y
+  a = a & 0x0f; //   and #$0F
+   a = a << 1; // asl
+a = a << 1; //   asl
+a = a << 1; //   asl
+  a = a +# 0x00; //   adc #$00
+  digitPointerm4[x] = a; //   sta digitPointer-4,x
+a = >:(&NumberFonts); //   lda #>NumberFonts
+  digitPointerm3[x] = a; //   sta digitPointer-3,x
+  y++; //   iny
+  x--; //   dex
+  x--; //   dex
+  goto BCD2DigitPtrs if !negative; //   bpl BCD2DigitPtrs
+a = gameState; //   lda gameState
+  goto ExitBCD2DigitPtrs if !negative; //   bpl ExitBCD2DigitPtrs
+  a = <:(NullCharacter); //   lda #<NullCharacter
+  digitPointerp6 = a; //   sta digitPointer+6
+  digitPointerp4 = a; //   sta digitPointer+4
+ExitBCD2DigitPtrs:
+  return; //rts
+  
+  const MarioGraphics : [u8] = [
+ // 0x00,
+];
+
+const StationaryMarioSprite : [u8] = [
+  0x00, // ; |        | $F969
+  0x3F, // ; |  XXXXXX| $F96A
+  0x1B, // ; |   XX XX| $F96B
+  0x1B, // ; |   XX XX| $F96C
+  0x3F, // ; |  XXXXXX| $F96D
+  0x7B, // ; | XXXX XX| $F96E
+  0x75, // ; | XXX X X| $F96F
+  0x76, // ; | XXX XX | $F970
+  0x7B, // ; | XXXX XX| $F971
+  0x3F, // ; |  XXXXXX| $F972
+  0x1F, // ; |   XXXXX| $F973
+  0x3E, // ; |  XXXXX | $F974
+  0x0F, // ; |    XXXX| $F975
+  0xDB, // ; |XX XX XX| $F976
+  0x6B, // ; | XX X XX| $F977
+  0x1A, // ; |   XX X | $F978
+  0x7E, // ; | XXXXXX | $F979
+  0x1C, // ; |   XXX  | $F97A
+  ];
+const RunningMarioSprite1 : [u8] = [
+  0x00, // ; |        | $F97B
+  0x06, // ; |     XX | $F97C
+  0x02, // ; |      X | $F97D
+  0x02, // ; |      X | $F97E
+  0xEE, // ; |XXX XXX | $F97F
+  0xFC, // ; |XXXXXX  | $F980
+  0xBD, // ; |X XXXX X| $F981
+  0xBD, // ; |X XXXX X| $F982
+  0x7F, // ; | XXXXXXX| $F983
+  0xF7, // ; |XXXX XXX| $F984
+  0xFE, // ; |XXXXXXX | $F985
+  0x9E, // ; |X  XXXX | $F986
+  0x0F, // ; |    XXXX| $F987
+  0xDB, // ; |XX XX XX| $F988
+  0x6B, // ; | XX X XX| $F989
+  0x1A, // ; |   XX X | $F98A
+  0x7E, // ; | XXXXXX | $F98B
+  0x1C, // ; |   XXX  | $F98C
+  0x00, // ; |        | $F98D
+  ];
+const RunningMarioSprite2 : [u8] = [
+    0x00, // ; |        | $F98E
+    0x1C, // ; |   XXX  | $F98F
+    0x0C, // ; |    XX  | $F990
+    0x0D, // ; |    XX X| $F991
+    0x1F, // ; |   XXXXX| $F992
+    0x1F, // ; |   XXXXX| $F993
+    0x0E, // ; |    XXX | $F994
+    0x7E, // ; | XXXXXX | $F995
+    0x7E, // ; | XXXXXX | $F996
+    0x3E, // ; |  XXXXX | $F997
+    0x1C, // ; |   XXX  | $F998
+    0x0F, // ; |    XXXX| $F999
+    0xDB, // ; |XX XX XX| $F99A
+    0x6B, // ; | XX X XX| $F99B
+    0x1A, // ; |   XX X | $F99C
+    0x7E, // ; | XXXXXX | $F99D
+    0x1C, // ; |   XXX  | $F99E
+    0x00, // ; |        | $F99F
+    0x00, // ; |        | $F9A0
+    0x00, // ; |        | $F9A1
+    0x00, // ; |        | $F9A2
+  ];
+
+const JumpingMarioSprite : [u8] = [
+  0x00, // ; |        | $F9A3
+  0x00, // ; |        | $F9A4
+  0x07, // ; |     XXX| $F9A5
+  0xFF, // ; |XXXXXXXX| $F9A6
+  0xFE, // ; |XXXXXXX | $F9A7
+  0xBC, // ; |X XXXX  | $F9A8
+  0x3F, // ; |  XXXXXX| $F9A9
+  0xFF, // ; |XXXXXXXX| $F9AA
+  0xFE, // ; |XXXXXXX | $F9AB
+  0x3E, // ; |  XXXXX | $F9AC
+  0x0F, // ; |    XXXX| $F9AD
+  0xDB, // ; |XX XX XX| $F9AE
+  0x6B, // ; | XX X XX| $F9AF
+  0x1A, // ; |   XX X | $F9B0
+  0x7E, // ; | XXXXXX | $F9B1
+  0x1C, // ; |   XXX  | $F9B2
+  ];
+
+const ClimbingMarioSprite : [u8] = [ 
+  0x00, // ; |        | $F9B3
+  0x1C, // ; |   XXX  | $F9B4
+  0x1C, // ; |   XXX  | $F9B5
+  0x0E, // ; |    XXX | $F9B6
+  0x7E, // ; | XXXXXX | $F9B7
+  0x7E, // ; | XXXXXX | $F9B8
+  0xFE, // ; |XXXXXXX | $F9B9
+  0xFE, // ; |XXXXXXX | $F9BA
+  0x7F, // ; | XXXXXXX| $F9BB
+  0x7F, // ; | XXXXXXX| $F9BC
+  0x7F, // ; | XXXXXXX| $F9BD
+  0xFF, // ; |XXXXXXXX| $F9BE
+  0xFE, // ; |XXXXXXX | $F9BF
+  0xFC, // ; |XXXXXX  | $F9C0
+  0x7C, // ; | XXXXX  | $F9C1
+  0x60, // ; | XX     | $F9C2
+  0x00, // ; |        | $F9C3
+];
+/*const JumpingSoundFrequency
+   .byte $0F,$0F,$0F,$0F,$0F
+   .byte $0F,$0E,$0D,$0D,$0D
+   .byte $0E,$0F,$0F,$0F,$0F
+   .byte $0F,$0E,$0D,$0D,$0E
+
+JumpingSoundFrequency2
+   .byte $0F,$0F,$0F,$0F
+   .byte $0E,$0D,$0E,$0F
+   .byte $0F,$0F,$0E,$0F
+
+ObstacleColor
+   .byte ORANGE                     ; color of hammer handle and obstacles
+
+GirlfriendColors
+   .byte YELLOW
+   .byte YELLOW
+   .byte TURQUISE
+   .byte TURQUISE
+   .byte TURQUISE
+   .byte TURQUISE
+   .byte TURQUISE
+   .byte SASH_RED
+   .byte TURQUISE
+   .byte TURQUISE
+   .byte BLONDE
+   .byte BLONDE
+   .byte BLONDE
+   .byte BLONDE
+   .byte BLONDE
+   .byte BLONDE
+
+;===============================================================================
+; R O M - C O D E (Part 3)
+;===============================================================================
+*/
+in rom @ ROMADDR + 0x9F5 {
+  #[fallthrough] func StoreMarioGraphics () { //StoreMarioGraphics SUBROUTINE
+    y = WALKWAY_HEIGHT; //   ldy #WALKWAY_HEIGHT
+  }
+}
+storeMarioGraphicLoop:
+  a = (&marioGraphicPointer as *u8)[y]; //   lda (marioGraphicPointer),y
+
+  /*sta zpMarioGraphics,y
+   dey
+   bpl .storeMarioGraphicLoop
+   rts
+
+InitializationTable1
+   .byte BLACK                   ; backgroundColor
+   .byte MARIO_STARTX            ; xPosMario
+   .byte REFLECT                 ; reflection of Mario
+   .word MallotAnimation1        ; missile graphic pointer (hammer)
+   .word HandleAnimation1        ; ball graphic pointer (hammer handle)
+   .byte $03
+   .byte PURPLE                  ; playfield color
+   .byte $9A                     ; yPosMario
+   .byte $2D                     ; xPosHammer
+
+
+InitializationTable2
+   .byte BLUE           ; playfield color
+   .byte $85            ; yPosMario
+   .byte $54            ; xPosHammer
+   .byte $00
+   .byte $01
+   .byte $02
+   .byte $03
+   .byte $04
+   .byte $05
+
+FireFoxLeftPF1Data_1
+   .byte $0F ; |    XXXX|
+   .byte $0A ; |    X X |
+   .byte $0F ; |    XXXX|
+   .byte $0A ; |    X X |
+   .byte $0F ; |    XXXX|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $02 ; |      X |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $02 ; |      X |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $02 ; |      X |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $02 ; |      X |
+   .byte $00 ; |        |
+
+FireFoxLeftPF2Data_1
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $02 ; |      X |
+   .byte $FD ; |XXXXXX X|
+   .byte $55 ; | X X X X|
+   .byte $FD ; |XXXXXX X|
+   .byte $55 ; | X X X X|
+   .byte $FF ; |XXXXXXXX|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+
+FireFoxLeftPF2Data_0
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $FF ; |XXXXXXXX|
+   .byte $54 ; | X X X  |
+   .byte $FF ; |XXXXXXXX|
+   .byte $54 ; | X X X  |
+   .byte $FF ; |XXXXXXXX|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+
+FireFoxLeftPF1Data_0
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+
+FireFoxLeftPF2Data_2
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $FD ; |XXXXXX X|
+   .byte $55 ; | X X X X|
+   .byte $FD ; |XXXXXX X|
+   .byte $55 ; | X X X X|
+   .byte $FD ; |XXXXXX X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $08 ; |    X   |
+
+;===============================================================================
+; R O M - C O D E (Part 4)
+;===============================================================================
+*/
+in rom @ ROMADDR + 0xA8A {
+  #[fallthrough] func InitializeGame() { // SUBROUTINE
+    x = 0x0A; //   ldx #$0A
+  
+    barrelLevel:
+    a = InitializationTable1[x];//   lda InitializationTable1,x
+    backgroundColorA[x] = a; //   sta backgroundColor,x
+    x--;//   dex
+    goto barrelLevel if !negative; //   bpl .barrelLevel
+
+    a = gameScreen; //   lda gameScreen
+    goto leaveInitialization if zero; //   beq .leaveInitialization
+    x = 0x08; // ldx #$08
+    fireFoxLevel:
+    a = InitializationTable2[x]; //   lda InitializationTable2,x
+    playfieldColorA[x] = a; //   sta playfieldColor,x
+    x--; //   dex 
+    goto fireFoxLevel if !negative; //   bpl .fireFoxLevel
+
+    leaveInitialization:
+    return; //   rts
+  }
+}
+  #[fallthrough] func PlayDeathSound() {
+    a = 0xFF; //   lda #$FF
+    losingLifeFlag = a; //   sta losingLifeFlag
+
+    //   IF NTSC
+    #[compile_if(NTSC)] x = 0x11; //   ldx #$11
+    //    ELSE
+    #[compile_if(!NTSC)] x = 0x0E; //ldx #$0E
+    //   ENDIF
+    a = 0x04; //   lda #$04
+    goto PlayMusic if !zero; //   bne PlayMusic
+
+  }
+  #[fallthrough] func Add100Points() {
+    a = 0x01;//   lda #$01
+  }
+
+    /*;
+;  ON ENTRY:
+;
+;     A = Value to increase score
+;*/
+    IncrementScore:
+    decimal = true; //   sed
+    carry = false; //   clc
+    a = a +#playerScorep1; //   adc playerScore+1
+    playerScorep1 = a; //   sta playerScore+1
+    a = 0x00; //    lda #$00
+    a = a +#playerScore; //   adc playerScore
+      playerScore = a; //   sta playerScore
+    decimal = false; //   cld
+  
+    /*
+;
+; the music for scoring points and for game over are the same
+;
+*/
+PlayIncrementScoreMusic:
+PlayGameOverMusic:
+
+    //   IF NTSC
+
+    #[compile_if(NTSC)]  x = 0x20; //ldx #$20
+
+    //   ELSE
+
+    #[compile_if(!NTSC)] x = 0x1A; // ldx #$1A
+
+    //   ENDIF
+
+    a = 0x03; //   lda #$03
+PlayMusic:
+    soundDuration = a; //   sta soundDuration
+    soundIndex = x; //   stx soundIndex
+    a = 0x0C; //   lda #$0C
+    AUDC[0] = a; //   sta AUDC0
+    a = 0x0F; //   lda #$0F
+    AUDV0 = a; //   sta AUDV0
+    return; //   rts
+  
+const DownLadderTable : [u8] = [
+//BarrelDownLadderTable
+0x84,0x65,0x68,0x4A,0x4C,0x2E,0x30,0x15,0x05,
+0x15,0x2C,0x48,
+0x81,0x15,0x31,0x4D,0x69,0x85
+  ];
+const FirefoxDownLadderTable : [u8] = [
+  0x15,0x15,0x15,0x15,0x31,0x31,0x31,0x31,0x4D,0x4D,0x4D,0x4D,0x69,0x69,
+  0x69,0x69
+];
+  
+
+
+ const KernelVectorTable : [u8] = [
+   <:(JumpBarrelHammerKernel),
+   >:(JumpBarrelHammerKernel),
+/*   JumpBarrelKernel as u16,   
+   FirefoxHammerKernel as u16,
+   JumpFirefoxKernel as u16
+   */
+   ];
+
+const BarrelPFDataTable : [*const [u8];4] = [
+  &BarrelRightPF1Data_6,
+  &BarrelPF0Data_6,
+  &BarrelPF0Data_0,
+  &BarrelPF2Data_0
+];
+  /*
+;
+; I'm not sure what the following byte is used for. Tracing the program shows that
+; this byte is never accessed. They're here to make the compiled ROM identical to
+; the cart.
+;
+   IF NTSC
+
+   .byte $2A
+
+   ELSE
+
+   .byte $00
+
+   ENDIF
+*/
+  
+const UpLadderTable @ ROMADDR + 0xB00: [u8] = [
+//BarrelUpLadderTable
+//;
+//; starting from the bottom
+//;
+ 0x9A,               //         ; last ladder
+ 0x82,0x7F,          //         ; right to left
+ 0x65,0x63,          //         ; left ot right
+ 0x49,0x47,          //         ; right to left
+ 0x2B,               //         ; left to right
+ 0x15,               //         ; last ladder
+
+ 0x2E,
+ 0x4B,
+ 0x67,0x9A,
+ 0x2A,0x46,
+ 0x62,0x7E,
+ 0x9A
+  ];
+
+
+const FirefoxUpLadderTable @ ROMADDR + 0xB12 : [u8] = [
+//;
+//; starting from the bottom
+//;
+0x31,0x31,0x31,0x31,
+0x4D,0x4D,0x4D,0x4D,
+0x69,0x69,0x69,0x69,
+0x85,0x85,0x85,0x85
+  ];
+/*
+MarioColors
+HorizontalColors
+
+   REPEAT WALKWAY_HEIGHT + 2
+   .byte BLACK
+   REPEND
+
+   .byte BLUE_GREEN
+   .byte BLUE_GREEN
+   .byte RED
+   .byte RED
+   .byte RED   
+   .byte RED   
+   .byte RED
+   .byte RED
+   .byte RED
+   .byte RED
+   .byte WHITE
+   .byte WHITE
+   .byte WHITE   
+   .byte WHITE   
+   .byte WHITE
+   .byte RED
+   .byte RED
+*/
+  
+const VerticalColors @ ROMADDR + 0xB50: [u8;WALKWAY_HEIGHT+2] = [
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK,
+  BLACK
+  ];
+  const VerticalColors2 @ ROMADDR + 0xB50 + WALKWAY_HEIGHT+2 : [u8;15] = [ 
+BLUE_GREEN,
+  BLUE_GREEN,
+  BLUE_GREEN,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+  RED,
+];
+  const VerticalColors3 @ ROMADDR + 0xB50 + WALKWAY_HEIGHT+2 + 15: [u8;WALKWAY_HEIGHT+1] = [
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+    BLACK,
+
+    ];
+/*  
+   REPEAT WALKWAY_HEIGHT + 2
+   .byte BLACK
+   REPEND
+
+   .byte BLUE_GREEN
+   .byte BLUE_GREEN
+   .byte BLUE_GREEN
+   .byte RED
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED   
+   .byte RED
+   .byte RED
+
+   REPEAT WALKWAY_HEIGHT + 1
+   .byte BLACK
+   REPEND
+];
+  /*
+DonkeyKong
+   .byte $00 ; |        |
+   .byte $E0 ; |XXX     | $FB99
+   .byte $E0 ; |XXX     | $FB9A
+   .byte $67 ; | XX  XXX| $FB9B
+   .byte $67 ; | XX  XXX| $FB9C
+   .byte $7E ; | XXXXXX | $FB9D
+   .byte $7E ; | XXXXXX | $FB9E
+   .byte $3E ; |  XXXXX | $FB9F
+   .byte $5E ; | X XXXX | $FBA0
+   .byte $DC ; |XX XXX  | $FBA1
+   .byte $BC ; |X XXXX  | $FBA2
+   .byte $FE ; |XXXXXXX | $FBA3
+   .byte $FF ; |XXXXXXXX| $FBA4
+   .byte $7F ; | XXXXXXX| $FBA5
+   .byte $39 ; |  XXX  X| $FBA6
+   .byte $45 ; | X   X X| $FBA7
+   .byte $7D ; | XXXXX X| $FBA8
+   .byte $55 ; | X X X X| $FBA9
+   .byte $7C ; | XXXXX  | $FBAA
+   .byte $38 ; |  XXX   | $FBAB
+*/
+const ObstacleTable : [u8] = [
+   <: ( &HorizontalBarrelSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT),
+//   <: ( &FallingBarrelSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT),
+//  <: ( &FirefoxSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT)
+  ];
+  /*
+
+FireFoxLeftPF1Table
+   REPEAT NUM_WALKWAYS - 1
+      .byte <FireFoxLeftPF1Data_0
+
+      REPEAT NUM_WALKWAYS
+         .byte <FireFoxLeftPF1Data_1-3
+      REPEND
+
+   REPEND
+
+FireFoxPF2Table
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+
+FireFoxPF0Table
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+   .byte <FireFoxLeftPF2Data_1
+
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+
+   .byte <FireFoxLeftPF1Data_0
+   .byte <FireFoxLeftPF2Data_0
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+   .byte <FireFoxLeftPF2Data_2
+
+LivesPFPattern
+   .byte $00 ; |        |           no lives remaining
+   .byte $01 ; |       X|           one life
+   .byte $05 ; |     X X|           two lives
+   .byte $15 ; |   X X X|           three lives
+
+   IF NTSC
+
+   .byte $89,$A5,$0D,$E9,$00
+
+   ELSE
+
+   .byte $00,$FF,$FF,$00,$00
+
+   ENDIF
+*/
+  const NumberFonts @ ROMADDR + 0xC00: [u8] = [
+    0x3C, // ; |  XXXX  | $FC00
+    0x66, // ; | XX  XX | $FC01
+    0x66, // ; | XX  XX | $FC02
+    0x66, // ; | XX  XX | $FC03
+    0x66, // ; | XX  XX | $FC04
+    0x66, // ; | XX  XX | $FC05
+    0x3C, // ; |  XXXX  | $FC06
+    0x00, // ; |        | $FC07
+    0x7E, // ; | XXXXXX | $FC08
+    0x18, // ; |   XX   | $FC09
+    0x18, // ; |   XX   | $FC0A
+    0x18, // ; |   XX   | $FC0B
+    0x38, // ; |  XXX   | $FC0C
+    0x18, // ; |   XX   | $FC0D
+    0x08, // ; |    X   | $FC0E
+    0x00, // ; |        | $FC0F
+    0x7E, // ; | XXXXXX | $FC10
+    0x62, // ; | XX   X | $FC11
+    0x60, // ; | XX     | $FC12
+    0x3C, // ; |  XXXX  | $FC13
+    0x06, // ; |     XX | $FC14
+    0x46, // ; | X   XX | $FC15
+    0x3C, // ; |  XXXX  | $FC16
+    0x00, // ; |        | $FC17
+    0x3C, // ; |  XXXX  | $FC18
+    0x46, // ; | X   XX | $FC19
+    0x06, // ; |     XX | $FC1A
+    0x1C, // ; |   XXX  | $FC1B
+    0x06, // ; |     XX | $FC1C
+    0x46, // ; | X   XX | $FC1D
+    0x3C, // ; |  XXXX  | $FC1E
+    0x00, // ; |        | $FC1F
+    0x0C, // ; |    XX  | $FC20
+    0x0C, // ; |    XX  | $FC21
+    0x7E, // ; | XXXXXX | $FC22
+    0x4C, // ; | X  XX  | $FC23
+    0x2C, // ; |  X XX  | $FC24
+    0x1C, // ; |   XXX  | $FC25
+    0x0C, // ; |    XX  | $FC26
+    0x00, // ; |        | $FC27
+    0x3C, // ; |  XXXX  | $FC28
+    0x46, // ; | X   XX | $FC29
+    0x06, // ; |     XX | $FC2A
+    0x7C, // ; | XXXXX  | $FC2B
+    0x60, // ; | XX     | $FC2C
+    0x60, // ; | XX     | $FC2D
+    0x7E, // ; | XXXXXX | $FC2E
+    0x00, // ; |        | $FC2F
+    0x3C, // ; |  XXXX  | $FC30
+    0x66, // ; | XX  XX | $FC31
+    0x66, // ; | XX  XX | $FC32
+    0x7C, // ; | XXXXX  | $FC33
+    0x60, // ; | XX     | $FC34
+    0x62, // ; | XX   X | $FC35
+    0x3C, // ; |  XXXX  | $FC36
+    0x00, // ; |        | $FC37
+    0x30, // ; |  XX    | $FC38
+    0x30, // ; |  XX    | $FC39
+    0x18, // ; |   XX   | $FC3A
+    0x0C, // ; |    XX  | $FC3B
+    0x06, // ; |     XX | $FC3C
+    0x42, // ; | X    X | $FC3D
+    0x7E, // ; | XXXXXX | $FC3E
+    0x00, // ; |        | $FC3F
+    0x3C, // ; |  XXXX  | $FC40
+    0x66, // ; | XX  XX | $FC41
+    0x66, // ; | XX  XX | $FC42
+    0x3C, // ; |  XXXX  | $FC43
+    0x66, // ; | XX  XX | $FC44
+    0x66, // ; | XX  XX | $FC45
+    0x3C, // ; |  XXXX  | $FC46
+    0x00, // ; |        | $FC47
+    0x3C, // ; |  XXXX  | $FC48
+    0x46, // ; | X   XX | $FC49
+    0x06, // ; |     XX | $FC4A
+    0x3E, // ; |  XXXXX | $FC4B
+    0x66, // ; | XX  XX | $FC4C
+    0x66, // ; | XX  XX | $FC4D
+    0x3C, // ; |  XXXX  | $FC4E
+    0x00, // ; |        | $FC4F
+];
+  
+const LFC50 @ ROMADDR + 0xC50 : [u8] = [ 
+0x80,0x90,0x32,0x36,0x36,0x3A,0x32,0x31,0xFF,0x34,0x3A,0x3A,0x80
+];
+/*
+ObstacleSprites
+NullCharacter
+HorizontalBarrelSprite
+
+   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+
+   .byte $3C ; |  XXXX  | $FC7A
+   .byte $6E ; | XX XXX | $FC7B
+   .byte $FB ; |XXXXX XX| $FC7C
+   .byte $BF ; |X XXXXXX| $FC7D
+   .byte $FD ; |XXXXXX X| $FC7E
+   .byte $DF ; |XX XXXXX| $FC7F
+   .byte $76 ; | XXX XX | $FC80
+   .byte $3C ; |  XXXX  | $FC81
+
+FallingBarrelSprite
+
+   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+
+   .byte $7E ; | XXXXXX | $FC9F
+   .byte $99 ; |X  XX  X| $FCA0
+   .byte $BD ; |X XXXX X| $FCA1
+   .byte $81 ; |X      X| $FCA2
+   .byte $BD ; |X XXXX X| $FCA3
+   .byte $99 ; |X  XX  X| $FCA4
+   .byte $7E ; | XXXXXX | $FCA5
+   .byte $00 ; |        | $FCA6
+
+FirefoxSprite
+
+   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+
+   .byte $38 ; |  XXX   | $FCC4
+   .byte $7E ; | XXXXXX | $FCC5
+   .byte $FF ; |XXXXXXXX| $FCC6
+   .byte $FF ; |XXXXXXXX| $FCC7
+   .byte $71 ; | XXX   X| $FCC8
+   .byte $AA ; |X X X X | $FCC9
+   .byte $AA ; |X X X X | $FCCA
+   .byte $71 ; | XXX   X| $FCCB
+
+   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+*/
+const FirefoxVerPos @ ROMADDR + 0xCE9 : [u8] = [
+0x60,0x44,0x28,TOP_PLATFORM_VALUE
+];
+/*;===============================================================================
+; R O M - C O D E (Part 5)
+;===============================================================================
+*/
+#[fallthrough] func StartNewScreen() { 
+  //StartNewScreen SUBROUTINE
+  a = 0x00; //   lda #$00
+  x = 0x06; //   ldx #$06
+}
+  y = <:(&HorizontalColors); //   ldy #<HorizontalColors
+loop:
+  /*
+   sta verPosP1,x                   ; clear out obstacle vert position, jumpHangTime,
+   dex                              ; and hammerTime
+   bmi .doneStartNewScreen
+   sty marioColorPointerLSB,x
+   bpl .loop
+.doneStartNewScreen
+   jmp InitializeGame
+;
+; The following byte seems to just be a filler byte to push AudioFrequencyTable to the
+; next page. I kept the values intact so the compiled ROM is identical to the cart.
+;
+*/
+  const AudioFrequencyTablem2 @ ROMADDR + 0xCFE: [u8] = [];
+#[compile_if(NTSC)] const AudioFrequencyTablem1 @ ROMADDR + 0xCFF: [u8] = [0x98];
+//   IF NTSC
+
+//   .byte $98
+
+  #[compile_if(!NTSC)] const AudioFrequencyTablem1 @ ROMADDR + 0xCFF: [u8] = [0x00];
+
+//   ELSE
+
+//   .byte $00
+
+//   ENDIF
+
+const AudioFrequencyTable @ ROMADDR + 0xD00: [u16] = [
+//  JumpingSoundFrequency,
+//  WalkingSoundFrequency,
+//  ScoringSoundFrequency,
+//  DeathSoundFrequency,
+//  JumpingSoundFrequency2,
+//  LF900
+];
+  /*
+DeathSoundFrequency
+
+   IF NTSC
+
+   .byte $0C,$0C,$0C,$0C
+   .byte $11,$11,$11
+   .byte $08,$08,$08
+   .byte $0B,$0A,$09,$08,$07,$06,$05
+
+   ELSE
+
+   .byte $0C,$0C,$0C,$11,$11,$08,$08,$0B,$0A,$09,$08,$07,$06,$05,$00,$00,$00
+
+   ENDIF
+
+BarrelRightPF1Data_1
+   .byte $FF ; |XXXXXXXX|
+   .byte $FF ; |XXXXXXXX|
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $14 ; |   X X  |
+   .byte $3C ; |  XXXX  |
+   .byte $E8 ; |XXX X   |
+   .byte $54 ; | X X X  |
+   .byte $AC ; |X X XX  |
+   .byte $78 ; | XXXX   |
+   .byte $C0 ; |XX      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $C0 ; |XX      |
+   .byte $78 ; | XXXX   |
+   .byte $AF ; |X X XXXX|
+   .byte $55 ; | X X X X|
+   .byte $EA ; |XXX X X |
+   .byte $3D ; |  XXXX X|
+   .byte $07 ; |     XXX|
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $14 ; |   X X  |
+   .byte $3C ; |  XXXX  |
+   .byte $E8 ; |XXX X   |
+   .byte $54 ; | X X X  |
+   .byte $AC ; |X X XX  |
+   .byte $78 ; | XXXX   |
+   .byte $C0 ; |XX      |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $C0 ; |XX      |
+   .byte $78 ; | XXXX   |
+   .byte $AF ; |X X XXXX|
+   .byte $55 ; | X X X X|
+   .byte $EA ; |XXX X X |
+   .byte $3D ; |  XXXX X|
+   .byte $07 ; |     XXX|
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |       
+   */
+const BarrelRightPF1Data_6 @ ROMADDR + 0xD91: [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0xFC, // ; |XXXXX X |
+  0x6C, // ; | XX X X |
+  0x90, // ; |X  X    |
+  0x6C, // ; | XX X X |
+  0xFC, // ; |XXXXX X |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  ];
+  /*
+;
+; last byte shared so don't cross a page boundary
+;
+Girlfriend
+   .byte $00 ; |        |
+   .byte $43 ; | X    XX| $FDAD
+   .byte $82 ; |X     X | $FDAE
+   .byte $7E ; | XXXXXX | $FDAF
+   .byte $7F ; | XXXXXXX| $FDB0
+   .byte $FF ; |XXXXXXXX| $FDB1
+   .byte $7E ; | XXXXXX | $FDB2
+   .byte $3C ; |  XXXX  | $FDB3
+   .byte $18 ; |   XX   | $FDB4
+   .byte $7E ; | XXXXXX | $FDB5
+   .byte $38 ; |  XXX   | $FDB6
+   .byte $9C ; |X  XXX  | $FDB7
+   .byte $7E ; | XXXXXX | $FDB8
+   .byte $BF ; |X XXXXXX| $FDB9
+   .byte $3A ; |  XXX X | $FDBA
+   .byte $1F ; |   XXXXX| $FDBB
+   .byte $07 ; |     XXX| $FDBC
+   .byte $00 ; |        | $FDBD
+   .byte $00 ; |        | $FDBE
+   .byte $00 ; |        | $FDBF
+
+;
+; ladder values are stored right to left starting with the lowest walkway
+;
+*/
+const LadderHorizValues @ ROMADDR + 0xDC0: [u8] = [
+0x6D,                   //     ; walkway 0
+0x51,0x31,              //     ; walkway 1
+0x59,0x6D,              //     ; walkway 2
+0x45,0x31,              //     ; walkway 3
+0x6D,                   //     ; walkway 4
+0x4D                    //     ; walkway 5
+];
+  /*
+;
+; going down -- reverse order
+;
+   .byte $4D                        ; walkway 5
+   .byte $65                        ; walkway 4
+   .byte $41,$49                    ; walkway 3
+   .byte $7B,$23                    ; walkway 2
+   .byte $7B,$23                    ; walkway 1
+   .byte $7B                        ; walkway 0
+
+.firefoxLadderHorizValues
+   .byte $29,$3D,$61,$75
+   .byte $29,$3D,$61,$75
+   .byte $29,$3D,$61,$75
+   .byte $29,$3D,$61,$75
+
+;===============================================================================
+; R O M - C O D E (Part 6)
+;===============================================================================
+
+;-----------------------------------------------------------------PositionHammer
+;
+; This subroutine positions the hammer objects horizontally. There is only one
+; hammer per level so doing this outside of the kernel is okay.
+;
+;  ON ENTRY:
+;
+;     A = Position
+;     X = Index to object (3 = handle 4 = mallot)
+;
+*/
+in rom @ ROMADDR + 0xDE2 {
+  #[fallthrough] func PositionHammer () { //PositionHammer SUBROUTINE
+    WSYNC = a; //   sta WSYNC
+    carry = true; //   sec
+  }
+  
+coarseMoveLoop2:
+  a = a -# 0x0F; //   sbc #$0F
+  /*
+   bcs .coarseMoveLoop
+   eor #$0F
+   asl
+   asl
+   asl
+   asl
+   adc #HMOVE_R7
+   sta RESP0,x
+   sta WSYNC
+   sta HMP0,x
+   rts
+   */
+}
+  const RampHorizValues @ ROMADDR + 0xDF8 : [u8] = [ //RampHorizValues
+   0x75,0x69,0x5D,0x51,0x45,0x3A,0x2D
+    ];
+  /*
+
+   IF NTSC
+
+   .byte $88
+
+   ELSE
+
+   .byte $00
+
+   ENDIF
+*/
+const MarioColorTable @ ROMADDR + 0xE00: [u8] = [
+  <:(&HorizontalColors),
+  <:(&HorizontalColors),
+  <:(&HorizontalColors),
+  <:(&HorizontalColors[1]),
+  <:(&HorizontalColors[2]),
+  <:(&VerticalColors),
+  <:(&HorizontalColors),
+];
+  /*
+WalkingSoundFrequency
+   .byte $1A
+
+BarrelRightPF1Table
+   .byte <BarrelRightPF1Data_0
+   .byte <BarrelRightPF1Data_1-13
+   .byte <BarrelRightPF1Data_2
+   .byte <BarrelRightPF1Data_3
+   .byte <BarrelRightPF1Data_4
+   .byte <BarrelRightPF1Data_5
+   .byte <BarrelRightPF1Data_6
+
+BarrelLeftPF1Data_0
+   .byte $0F ; |    XXXX|
+   .byte $0F ; |    XXXX|
+   .byte $00 ; |        |
+   .byte $06 ; |     XX |
+   .byte $00 ; |        |
+   .byte $06 ; |     XX |
+   .byte $00 ; |        |
+   .byte $06 ; |     XX |
+   .byte $00 ; |        |
+   .byte $06 ; |     XX |
+   .byte $00 ; |        |
+   .byte $06 ; |     XX |
+   .byte $00 ; |        |
+BarrelPF0Data_3
+   .byte $06 ; |     XX |
+BarrelLeftPF1Data_2
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $01 ; |       X|
+   .byte $0F ; |    XXXX|
+   .byte $0A ; |    X X |
+   .byte $05 ; |     X X|
+   .byte $0B ; |    X XX|
+   .byte $0E ; |    XXX |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+BarrelPF0Data_4
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+
+BarrelLeftPF1Data_3
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $02 ; |      X |
+   .byte $03 ; |      XX|
+   .byte $01 ; |       X|
+   .byte $02 ; |      X |
+   .byte $03 ; |      XX|
+   .byte $01 ; |       X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+
+BarrelPF0Data_5
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+*/
+const BarrelPF2Data_0 @ ROMADDR + 0xE4F: [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x0F, // ; |    XXXX|
+  0x0B, // ; |    X XX|
+  0x04, // ; |     X  |
+  0x0B, // ; |    X XX|
+  0x0F, // ; |    XXXX|
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  ];
+/*
+BarrelPF2Data_2
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+BarrelPF0Data_1
+   .byte $00 ; |        |
+   .byte $E0 ; |XXX     |
+   .byte $BC ; |X XXXX  |
+   .byte $57 ; | X X XXX|
+   .byte $AA ; |X X X X |
+   .byte $F5 ; |XXXX X X|
+   .byte $1E ; |   XXXX |
+   .byte $03 ; |      XX|
+   .byte $00 ; |        |
+   .byte $01 ; |       X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $01 ; |       X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $01 ; |       X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $01 ; |       X|
+
+BarrelPF2Data_3
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $01 ; |       X|
+   .byte $03 ; |      XX|
+   .byte $1E ; |   XXXX |
+   .byte $F5 ; |XXXX X X|
+   .byte $AA ; |X X X X |
+   .byte $57 ; | X X XXX|
+   .byte $BC ; |X XXXX  |
+   .byte $E0 ; |XXX     |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+
+BarrelPF2Data_4
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $F0 ; |XXXX    |
+   .byte $BC ; |X XXXX  |
+   .byte $57 ; | X X XXX|
+   .byte $AA ; |X X X X |
+   .byte $F5 ; |XXXX X X|
+   .byte $1E ; |   XXXX |
+   .byte $03 ; |      XX|
+   .byte $00 ; |        |
+   .byte $21 ; |  X    X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $21 ; |  X    X|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $21 ; |  X    X|
+
+BarrelPF2Data_5
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $21 ; |  X    X|
+   .byte $03 ; |      XX|
+   .byte $1E ; |   XXXX |
+   .byte $F5 ; |XXXX X X|
+   .byte $AA ; |X X X X |
+   .byte $57 ; | X X XXX|
+   .byte $BC ; |X XXXX  |
+   .byte $E0 ; |XXX     |
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |       
+   */
+const BarrelPF0Data_0 @ ROMADDR + 0xED4: [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0xFF, // ; |XXXXXXXX|
+  0xB6, // ; |X XX XX |
+  0x49, // ; | X  X  X|
+  0xB6, // ; |X XX XX |
+  0xFF, // ; |XXXXXXXX|
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x80, // ; |X       |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+];
+  /*
+BarrelPF2Data_1       
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |
+   .byte $FF ; |XXXXXXXX|
+   .byte $FF ; |XXXXXXXX|
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+
+   IF NTSC
+
+   .byte $A0
+
+   ELSE
+
+   .byte $00
+
+   ENDIF
+*/
+const MarioAnimationTable @ ROMADDR + 0xF00: [u8] = [
+  <:(&StationaryMarioSprite as u16 - (WALKWAY_HEIGHTM1)),// $4D,
+  <:(&RunningMarioSprite1 as u16 -WALKWAY_HEIGHTM1),// $5F,
+  <:(&StationaryMarioSprite as u16  - WALKWAY_HEIGHTM1),// $4D,
+  <:(&RunningMarioSprite2 as u16  - WALKWAY_HEIGHTM1),// $72,
+  <:(&JumpingMarioSprite as u16  - WALKWAY_HEIGHTM1),// $87,
+  <:(&ClimbingMarioSprite as u16  - WALKWAY_HEIGHTM1),// $97,
+  <:(&StationaryMarioSprite as u16  - WALKWAY_HEIGHTM1),// $4D
+  ];
+  /*
+BarrelPF0Data_2
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |
+   .byte $F0 ; |XXXX    |
+   .byte $50 ; | X X    |
+   .byte $A0 ; |X X     |
+   .byte $D0 ; |XX X    |
+   .byte $70 ; | XXXX   |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+BarrelRightPF1Data_0
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $10 ; |   X    |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $70 ; | XXX    |
+   .byte $D0 ; |XX X    |
+   .byte $A0 ; |X X     |
+   .byte $50 ; | X X    |
+   .byte $F0 ; |XXXX    |
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+BarrelRightPF1Data_2
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $40 ; | X      |
+   .byte $00 ; |        |
+   .byte $80 ; |X       |
+   .byte $F0 ; |XXXX    |
+   .byte $50 ; | X X    |
+   .byte $A0 ; |X X     |
+   .byte $D0 ; |XX X    |
+   .byte $70 ; | XXX    |
+   .byte $00 ; |        |
+BarrelRightPF1Data_3
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $70 ; | XXX    |
+   .byte $D0 ; |XX X    |
+   .byte $A0 ; |X X     |
+   .byte $50 ; | X X    |
+   .byte $F0 ; |XXXX    |
+   .byte $80 ; |X       |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+BarrelRightPF1Data_4
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |       
+   */
+const BarrelPF0Data_6 @ ROMADDR + 0xF62 : [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0xF0, // ; |XXXX    |
+  0xD0, // ; |XX X    |
+  0x20, // ; |  X     |
+  0xD0, // ; |XX X    |
+  0xF0, // ; |XXXX    |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  ];
+
+const NoHammerAnimation @ ROMADDR + 0xF70 : [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+];
+  /*
+BarrelRightPF1Data_5
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $F0 ; |XXXX    |
+
+MallotAnimation1
+   .byte $F0,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+HandleAnimation1
+   .byte $00 ; |        | 
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |   
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $FF ; |XXXXXXXX|
+   .byte $FF ; |XXXXXXXX|
+   .byte $FF ; |XXXXXXXX|
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+   .byte $00 ; |        |
+*/
+const HandleAnimation2 @ ROMADDR + 0xF9A: [u8] = [
+  0xFF, // ; |XXXXXXXX|
+  0x00, // ; |        | 
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |   
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |   
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0xFF, // ; |XXXXXXXX|
+  0xFF, // ; |XXXXXXXX|
+];
+  
+const MallotAnimation2 @ ROMADDR + 0xFA7: [u8] = [
+  0xFF, // ; |XXXXXXXX|
+  0x00, // ; |        |
+  0xFF, // ; |XXXXXXXX|
+  0xFF, // ; |XXXXXXXX|
+  0xFF, // ; |XXXXXXXX|
+  0xFF, // ; |XXXXXXXX|
+  0xFF, // ; |XXXXXXXX|
+  0xFF, // ; |XXXXXXXX|
+  0x00, // ; |        | 
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |   
+  0x00, // ; |        |
+];
+  /*
+
+
+   .byte $00,$00,$00,$00
+
+
+   .byte $FF,$FF,$00,$00,$00,$00,$00,$00
+       .byte $00,$00,$00
+
+ScoringSoundFrequency
+   .byte $0A,$0A,$0A,$0A,$0A,$0A,$0A
+   .byte $06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06
+   .byte $07,$07,$07,$07,$07
+   .byte $08,$08,$08,$08,$08
+   .byte $0A,$0A,$0A,$0A,$0A
+
+
+BarrelLeftPF1Table
+   .byte <BarrelLeftPF1Data_2-WALKWAY_HEIGHT
+   .byte <BarrelLeftPF1Data_2
+   .byte <BarrelLeftPF1Data_3
+   .byte <BarrelLeftPF1Data_2
+   .byte <BarrelLeftPF1Data_3
+
+BarrelPF2Table
+   .byte <BarrelPF2Data_0
+   .byte <BarrelPF2Data_1
+   .byte <BarrelPF2Data_2
+   .byte <BarrelPF2Data_3
+   .byte <BarrelPF2Data_4
+   .byte <BarrelPF2Data_5
+
+BarrelPF0Table
+   .byte <BarrelPF0Data_0;$D4
+   .byte <BarrelPF0Data_1;$71
+   .byte <BarrelPF0Data_2-3
+   .byte <BarrelPF0Data_3;$1C
+   .byte <BarrelPF0Data_4;$34
+   .byte <BarrelPF0Data_5;$49
+
+   .byte $62                        ; ???????????
+
+LoopCountTable
+   .byte $0C,$02,$02,$02,$02,$02
+
+   org $FFFC
+   .word Start
+   .word Start
+
+
+   */
+
+}
+
+// setup vectors
+in rom @ 0xFFFC {
+  const : [u16] =[(&Start as u16), (&Start as u16)];
+}
+

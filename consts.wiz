@@ -1,0 +1,173 @@
+
+//;============================================================================
+//; U S E R - C O N S T A N T S
+//;============================================================================
+let NTSC            = true;//             ; 1 = NTSC -or- 0 = PAL
+
+//; color constants:
+let BLACK       =  0x00;//$00
+let WHITE       =  0x00; //$0F
+
+//   IF NTSC
+   
+#[compile_if(NTSC)] let ORANGE      =  0x2F;
+#[compile_if(NTSC)] let BROWN       =  0x34;
+#[compile_if(NTSC)] let TURQUISE    =  0xA8;
+#[compile_if(NTSC)] let BLUE        =  0x8A;
+#[compile_if(NTSC)] let YELLOW      =  0x1E;
+#[compile_if(NTSC)] let BLONDE      =  YELLOW;
+#[compile_if(NTSC)] let RED         =  0x46;
+#[compile_if(NTSC)] let RED_2       =  RED;
+#[compile_if(NTSC)] let SASH_RED    =  RED;
+#[compile_if(NTSC)] let PURPLE      =  0x6A;
+#[compile_if(NTSC)] let LIGHT_GREEN =  0xDA;
+#[compile_if(NTSC)] let BLUE_GREEN  =  0xA6;
+
+//   ELSE
+   
+#[compile_if(!NTSC)] let ORANGE      =  0x2B;   
+#[compile_if(!NTSC)] let BROWN       =  0x44;
+#[compile_if(!NTSC)] let TURQUISE    =  0xB7;
+#[compile_if(!NTSC)] let BLUE        =  0xC8;
+#[compile_if(!NTSC)] let YELLOW      =  0x28;
+#[compile_if(!NTSC)] let BLONDE      =  0x2E;
+#[compile_if(!NTSC)] let RED         =  0x44;
+#[compile_if(!NTSC)] let RED_2       =  0x46;                  ; //this seemed to a mistake in the PAL translation
+#[compile_if(!NTSC)] let SASH_RED    =  0x69;
+#[compile_if(!NTSC)] let PURPLE      =  0x88;
+#[compile_if(!NTSC)] let LIGHT_GREEN =  0x38;
+#[compile_if(!NTSC)] let BLUE_GREEN  =  0xC8;
+
+//   ENDIF
+
+//   IF NTSC
+
+#[compile_if(NTSC)] let VBLANK_TIME       = 0x2D;
+#[compile_if(NTSC)] let OVERSCAN_TIME     = 0x23;
+
+//   ELSE
+
+#[compile_if(!NTSC)] let VBLANK_TIME       = 0x4B;
+#[compile_if(!NTSC)] let OVERSCAN_TIME     = 0x40;
+
+//   ENDIF
+   
+//; game state values
+let GAME_OVER                     = 0x00;
+let START_NEW_LEVEL               = 0x01;
+let LEVEL_COMPLETED               = 0x02;
+
+let MAX_OBSTACLES                 = 0x04;
+let MAX_OBSTACLESm1               = 0x03;
+
+let WALKWAY_HEIGHTM1              = 0x1A;
+let WALKWAY_HEIGHT                = 0x1B;
+let WALKWAY_HEIGHTM5		  = (WALKWAY_HEIGHT - 5);
+let WALKWAY_HEIGHTP1		  = (WALKWAY_HEIGHT + 1);
+let HAMMER_GROUP                  = 0x04;
+let NUM_WALKWAYS                  = 0x05;
+
+let STARTING_MARIOS               = 0x02; // number of lives at the start of a game
+let MARIO_MOVE_RATE               = 0x02; // decrement for faster mario -- increase for slower
+let MAX_HAMMER_TIME               = 0x03;
+
+let HAMMER_HEIGHT                 = 0x0D;
+
+let JUMP_HANGTIME                 = 0x1F;
+let MARIO_STARTX                  = 0x31;
+let BONUS_TIMER_DELAY             = 0x7F;
+
+let PLAYER_HEIGHT                 = 0x14;
+let MARIO_HEIGHT                  = 0x11;
+let NUMBER_HEIGHT                 = 0x06;
+
+let JUMPING_HEIGHT                = 0x07; // increase this value for the high jump :-)
+
+let LADDER_RANGE                  = 0x03;
+
+let FAIR_PIXEL_DELTA              = 0x09;
+
+let OBSTACLE_HEIGHT               = 0x24;
+let OBSTACLE_GRAPHIC_HEIGHT       = 0x08;
+
+let TOP_PLATFORM_VALUE            = 0x0C;
+
+let BARREL_SPRITE_NUMBER          = 0x00;
+let FALLING_BARREL_SPRITE_NUMBER  = 0x01;
+let FIREFOX_SPRITE_NUMBER         = 0x02;
+
+//; obstacle moving state
+let OBSTACLE_MOVING_RIGHT   = 0x01;
+let OBSTACLE_MOVING_LEFT    = 0x00;
+let OBSTACLE_MOVING_DOWN    = 0xF0;
+
+//; rivit constants
+let HORIZ_LEFT_RIVET              = 0x36; //horizontal position of left rivit
+let HORIZ_RIGHT_RIVET             = 0x6A; //horizontal position of right rivit
+let COMPLETE_RIVET_WALKWAY        = 0x12;
+let LEFT_RIVET_VALUE              = 0x06;
+let RIGHT_RIVET_VALUE             = 0x0C;
+let MAX_FIREFOX_LADDERS           = 0x10;
+
+let XMIN_LEVEL1                   = 0x24;
+let XMAX_LEVEL1                   = 0x7C;
+
+//; barrel constants
+let XMIN_ODD_LEVEL0               = 0x29;
+let XMAX_ODD_LEVEL0               = 0x75;
+let YMIN_LEVEL0                   = 0x0F;
+let STARTING_BARREL_VERT          = TOP_PLATFORM_VALUE;
+let STARTING_BARREL_HORIZ         = 0x25;
+let BOTTOM_BARREL_PLATFORM_VALUE  = 0x91;
+
+//; score constants
+let STARTING_BONUS                = 0x50;
+let SMASHING_OBSTACLE             = 0x08;
+
+
+/*
+;===============================================================================
+; T I A - C O N S T A N T S
+;===============================================================================
+
+HMOVE_L7          =  $70
+HMOVE_L6          =  $60
+HMOVE_L5          =  $50
+HMOVE_L4          =  $40
+HMOVE_L3          =  $30
+HMOVE_L2          =  $20
+HMOVE_L1          =  $10
+HMOVE_0           =  $00
+HMOVE_R1          =  $F0
+HMOVE_R2          =  $E0
+HMOVE_R3          =  $D0
+HMOVE_R4          =  $C0
+HMOVE_R5          =  $B0
+HMOVE_R6          =  $A0
+HMOVE_R7          =  $90
+HMOVE_R8          =  $80
+
+; values for NUSIZx:
+ONE_COPY          = %000
+TWO_COPIES        = %001
+TWO_WIDE_COPIES   = %010
+THREE_COPIES      = %011
+DOUBLE_SIZE       = %101
+THREE_MED_COPIES  = %110
+QUAD_SIZE         = %111
+
+; values for REFPx:
+NO_REFLECT        = %0000
+REFLECT           = %1000
+
+; SWCHA joystick bits:*/
+
+let MOVE_RIGHT        = 0b01111111;
+let MOVE_LEFT         = 0b10111111;
+let MOVE_DOWN         = 0b00100000;
+let MOVE_UP           = 0b00010000;
+let NO_MOVE           = 0b11111111;
+
+let REFLECT = 0b1000;
+let NO_REFLECT = 0x00;
+

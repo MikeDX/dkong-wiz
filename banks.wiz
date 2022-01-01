@@ -1,0 +1,4 @@
+import "vars";
+bank rom @ ROMADDR : [constdata; 4096];
+bank ram @ 0x80 : [vardata; 128];
+bank tia @ ROMADDR - 0x1000 : [vardata; 128];

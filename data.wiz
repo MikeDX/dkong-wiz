@@ -1,0 +1,109 @@
+import "banks";
+import "vars";
+import "consts";
+import "vcs";
+
+in rom @ ROMADDR + 0xA00 {
+
+  const InitializationTable1 : [u8] = [
+    //    InitializationTable1
+    BLACK, //                   ; backgroundColor
+    MARIO_STARTX, //            ; xPosMario
+    REFLECT, //                 ; reflection of Mario
+  ];
+  const InitializationTable1b : [u16] = [
+    &MallotAnimation1 as u16, //        ; missile graphic pointer (hammer)
+    &HandleAnimation1 as u16, //        ; ball graphic pointer (hammer handle)
+  ];
+  const InitializationTable1c : [u8] = [
+    0x03,
+    PURPLE, //                  ; playfield color
+    0x9A, //                     ; yPosMario
+    0x2D  //                   ; xPosHammer
+  ];
+
+  const InitializationTable2 : [u8] = [
+    BLUE  , //         ; playfield color
+    0x85  , //         ; yPosMario
+    0x54  ,  //        ; xPosHammer
+    0x00  ,
+    0x01  ,
+    0x02  ,
+    0x03  ,
+    0x04  ,
+    0x05  ,
+  ];
+
+  const MallotAnimation1 @ ROMADDR + 0xF7F: [u8;14] = [
+    0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  ];
+
+  const HandleAnimation1 @ ROMADDR + 0xF8D: [u8] = [
+    0x00, // |        | 
+    0x00, // |        |
+    0x00, // |        |
+    0x00, // |        |   
+    0x00, // |        |
+    0x00, // |        |
+    0x00, // |        |
+    0xFF, // |XXXXXXXX|
+    0xFF, // |XXXXXXXX|
+    0xFF, // |XXXXXXXX|
+    0x00, // |        |
+    0x00, // |        |
+    0x00, // |        |
+
+  ];
+
+  const HorizontalColors @ ROMADDR + 0xB22: [u8;44] = [
+    //REPEAT WALKWAY_HEIGHT + 2
+    //   .byte BLACK
+    //   REPEND
+
+    BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
+    BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
+    BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
+    BLACK, BLACK, BLACK, 
+
+    BLUE_GREEN,
+    BLUE_GREEN,
+    RED,
+    RED,
+    RED   ,
+    RED   ,
+    RED,
+    RED,
+    RED,
+    RED,
+    WHITE,
+    WHITE,
+    WHITE   ,
+    WHITE   ,
+    WHITE,
+    RED,
+    RED
+
+  ];
+
+  let ObstacleSprites = (ROMADDR + 0xC5D) as *u8;
+  let NullCharacter = (ROMADDR + 0xC5D)  as *u8; //: [u8;32];
+  /*     REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+*/
+  const HorizontalBarrelSprite @ ROMADDR + 0xC5D  : [u8;37] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    0x3C,  // ; |  XXXX  | $FC7A
+    0x6E,  // ; | XX XXX | $FC7B
+    0xFB,  // ; |XXXXX XX| $FC7C
+    0xBF,  // ; |X XXXXXX| $FC7D
+    0xFD,  // ; |XXXXXX X| $FC7E
+    0xDF,  // ; |XX XXXXX| $FC7F
+    0x76,  // ; | XXX XX | $FC80
+    0x3C,  // ; |  XXXX  | $FC81
+
+  ];
+}
