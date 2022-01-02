@@ -218,6 +218,7 @@ namespace vcs {
         var missile2_vs_players @ 0x31 : u8;
         var player1_vs_playfieldm30 @ 0x02 : u8;
         var player1_vs_playfield @ 0x32 : u8;
+        var player2_vs_playfieldm30 @ 0x03 : u8;
         var player2_vs_playfield @ 0x33 : u8;
         var missile1_vs_playfield @ 0x34 : u8;
         var missile2_vs_playfield @ 0x35 : u8;
@@ -231,8 +232,10 @@ namespace tiamirror {
     var HMBL @ 0xE024 : u8;
     var RESP1 @ 0xE011 : u8;
     var ENABL @ 0xE01F : u8;
+    var GRP0 @ 0xE01B : u8;
   }
 }
+var VSYNCA @ 0x00 : [u8;0xFF];
 let VSYNC = vcs.sync.vsync;
 let WSYNC = vcs.sync.wsync;
 let NUSIZ0 = vcs.control.player1;
@@ -241,6 +244,8 @@ let HMBL = vcs.hmove.ball;
 //let HMBL = vcs.hmove.missile1;
 let RESP = vcs.reset.players;
 let RESP0 = vcs.reset.player1;
+var RESP0v @ 0x10 : [u8;10]; // vcs.reset.player1;
+//let RESP0m14A = (RESP0 - 0x14);
 let RESP1 = vcs.reset.player2;
 let HMOVE = vcs.hmove.apply;
 let HMOVE_R7 = 0x90;
@@ -264,11 +269,13 @@ let PF1 = vcs.pattern.playfield2;
 var PF164 @ 0x4E : [u8;10] ; //((vcs.pattern.playfield2 + 64) as *u8);
 let PF2 = vcs.pattern.playfield3;
 
+let ENAM1 = vcs.pattern.missile1;
 let ENABL = vcs.pattern.ball;
 //let ENABL = vcs.pattern.missile1;
 let CXP0FB = vcs.collision.player1_vs_playfield;
 let CXP0FBm30 = vcs.collision.player1_vs_playfieldm30;
 let CXP1FB = vcs.collision.player2_vs_playfield;
+let CXP1FBm30 = vcs.collision.player2_vs_playfieldm30;
 let CXPPMM = vcs.collision.pvp_mvm;
 let CXPPMMm30 = vcs.collision.pvp_mvm_m30;
 var CXM1P @ 0x01 : u8;

@@ -5,24 +5,24 @@ import "vcs";
 
 in rom @ ROMADDR + 0xA00 {
 
-  const InitializationTable1 : [u8] = [
+  const InitializationTable1 @ ROMADDR + 0xA00 : [u8] = [
     //    InitializationTable1
     BLACK, //                   ; backgroundColor
     MARIO_STARTX, //            ; xPosMario
     REFLECT, //                 ; reflection of Mario
   ];
-  const InitializationTable1b : [u16] = [
+  const InitializationTable1b @ ROMADDR + 0xA03 : [u16] = [
     &MallotAnimation1 as u16, //        ; missile graphic pointer (hammer)
     &HandleAnimation1 as u16, //        ; ball graphic pointer (hammer handle)
   ];
-  const InitializationTable1c : [u8] = [
+  const InitializationTable1c @ ROMADDR + 0xA07 : [u8] = [
     0x03,
     PURPLE, //                  ; playfield color
     0x9A, //                     ; yPosMario
     0x2D  //                   ; xPosHammer
   ];
 
-  const InitializationTable2 : [u8] = [
+  const InitializationTable2 @ ROMADDR + 0xA0B : [u8] = [
     BLUE  , //         ; playfield color
     0x85  , //         ; yPosMario
     0x54  ,  //        ; xPosHammer

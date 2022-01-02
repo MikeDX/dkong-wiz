@@ -36,7 +36,11 @@ var backgroundColorA   @ 0x92 : [u8;10]; //
 var horPosMario        @ 0x93 : u8 ;//
 var marioDirection     @ 0x94 : u8 ;//    ;  Mario or Donkey Kong
 var missilePointer     @ 0x95 : u8 ;//    ; $95 - $96
+var missilePointeru16     @ 0x95 : u16 ;//    ; $95 - $96
+
 var ballPointer        @ 0x97 : u8 ;//    ; $97 - $98
+var ballPointeru16        @ 0x97 : u16 ;//    ; $97 - $98
+
 var holdObstacleNumber @ 0x99 : u8 ;//    ; used in overscan to loop through obstacles
 var playfieldColor     @ 0x9A : u8 ;//
 var playfieldColorA     @ 0x9A : [u8;10];//
@@ -70,25 +74,48 @@ var coarseHorPosP1A       @ 0xCD : [u8;10] ;//    ; $CD - $D2
                               
 var fineHorPosP1         @ 0xD3 : u8 ;//    ; $D3 - $D8
 var fineHorPosP1A         @ 0xD3 : [u8;10] ;//    ; $D3 - $D8
-
+var rightPF1Pointerm5A      @ 0xD4 : [u8;10] ;//    ; $D9 - $DA
 var rightPF1Pointer      @ 0xD9 : u8 ;//    ; $D9 - $DA
 var pf0Pointer           @ 0xDB : u8 ;//    ; $DB - $DC
+var pf0Pointerp1           @ 0xDB + 1: u8 ;//    ; $DB - $DC
+
 var digitPointerm4       @ 0xD9 : [u8;4] ;//    ; $DD - $E5
 var digitPointerm3       @ 0xDA : [u8;4] ;//    ; $DD - $E5
 var digitPointer         @ 0xDD : u8 ;//    ; $DD - $E5
+var digitPointeru16         @ 0xDD : u16 ;//    ; $DD - $E5
+
+var digitPointerp2u16         @ 0xDD + 0x02: u16 ;//    ; $DD - $E5
+
 var digitPointerp4         @ 0xDD + 0x04: u8 ;//    ; $DD - $E5
+var digitPointerp4u16         @ 0xDD + 0x04: u16 ;//    ; $DD - $E5
+
 var digitPointerp6         @ 0xDD + 0x06: u8 ;//    ; $DD - $E5
+var digitPointerp6u16         @ 0xDD + 0x06: u16 ;//    ; $DD - $E5
+
+var digitPointerp6A         @ 0xDD + 0x06: [u8;10] ;//    ; $DD - $E5
+
+var digitPointerp8         @ 0xDD + 0x08: u8 ;//    ; $DD - $E5
 
 //;-------------------------------------------
 var pf2Pointer           @ 0xDD : u8;
+var pf2Pointerp1           @ 0xDD + 1 : u8;
+
 var leftPF1Pointer       @ 0xDD+2 : u8;
+var leftPF1Pointerp1       @ 0xDD+3 : u8;
+
 var obstaclePointer      @ 0xDD+4   : u8; //$E1 - $E2
+var obstaclePointerA     @ 0xDD+4   : [u8;10]; //$E1 - $E2
+
 var marioGraphicPointer  @ 0xDD+6   : u8; //$E3 - $E4
+var marioGraphicPointeru16  @ 0xDD+6   : u16; //$E3 - $E4
+
 var marioGraphicPointerA  @ 0xDD+6   : [u8;4]; //$E3 - $E4
 var marioGraphicPointerB  @ 0xDD+6   : u16; //$E3 - $E4
 
 //;-------------------------------------------
 var marioColorPointer    @ 0xDD+6 : u16 ; // marioGraphicPointer
+var marioColorPointerA    @ 0xDD+6 : [u8;10] ; // marioGraphicPointer
+
 var audioFrequencyPointer16 @ 0xDD+6 : u16 ; // marioGraphicPointer
 var audioFrequencyPointer @ 0xDD+6 : u8 ; // marioGraphicPointer
 var audioFrequencyPointerp1 @ 0xDD+7 : u8 ; // marioGraphicPointer
@@ -122,6 +149,15 @@ var temp                 @ 0xED : u8 ; // missile1Size;
 
 var hammerKernelVector   @ 0xEE : [u8;4] ;//    ; pointer to hammer kernel ($EE - $EF)
 var kernelVector         @ 0xF0 : u8 ;//    ; pointer to no ladder kerenel ($F0 - $F1)
+var obstaclePointerLSBm1   @ 0xF1 : [u8;6] ;//    ; $F2 - $F7
 var obstaclePointerLSB   @ 0xF2 : [u8;6] ;//    ; $F2 - $F7
 var marioColorPointerLSBM1 @ 0xF7 : [u8;6]; //
 var marioColorPointerLSB @ 0xF8 : [u8;6] ;//    ; $F8 - $FD
+
+let ONE_COPY        = 0b000;
+let TWO_COPIES      = 0b001;
+let TWO_WIDE_COPIES = 0b010;
+let THREE_COPIES    = 0b011;
+let DOUBLE_SIZE     = 0b101;
+let THREE_MED_COPIES = 0b110;
+let QUAD_SIZE       = 0b111;
