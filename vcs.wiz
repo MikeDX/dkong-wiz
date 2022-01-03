@@ -232,7 +232,9 @@ namespace tiamirror {
     var HMBL @ 0xE024 : u8;
     var RESP1 @ 0xE011 : u8;
     var ENABL @ 0xE01F : u8;
-    var GRP0 @ 0xE01B : u8;
+    var GRP0 @ 0x201B : u8;
+    var GRP0N @ 0x001B : u8;
+    var COLUP0 @ 0x0006 : u8;
   }
 }
 var VSYNCA @ 0x00 : [u8;0xFF];
@@ -244,11 +246,13 @@ let HMBL = vcs.hmove.ball;
 //let HMBL = vcs.hmove.missile1;
 let RESP = vcs.reset.players;
 let RESP0 = vcs.reset.player1;
+var RESP0A @ 0x10 : [u8;10]; // vcs.reset.player1;
 var RESP0v @ 0x10 : [u8;10]; // vcs.reset.player1;
 //let RESP0m14A = (RESP0 - 0x14);
 let RESP1 = vcs.reset.player2;
 let HMOVE = vcs.hmove.apply;
 let HMOVE_R7 = 0x90;
+var HMP0A @ 0x20 : [u8;10]; //= vcs.hmove.player1;
 let HMP0 = vcs.hmove.player1;
 let HMP1 = vcs.hmove.player2;
 let REFP0 = vcs.reflect.player1;
@@ -258,10 +262,12 @@ let VDELP0 = vcs.vdelay.player1;
 let VDELP1 = vcs.vdelay.player2;
 let HMCLR = vcs.hmove.clear;
 let COLUP = vcs.color.players;
+var COLUP0A @ 0x06 : [u8;0xFF]; 
 let COLUP0 = vcs.color.player1;
 let COLUP1 = vcs.color.player2;
 let COLUPF = vcs.color.fg;
 let COLUBK = vcs.color.bg;
+var GRP0A @ 0x1B : [u8;10];
 let GRP0 = vcs.pattern.player1;
 let GRP1 = vcs.pattern.player2;
 let PF0 = vcs.pattern.playfield1;
@@ -269,7 +275,7 @@ let PF1 = vcs.pattern.playfield2;
 var PF164 @ 0x4E : [u8;10] ; //((vcs.pattern.playfield2 + 64) as *u8);
 let PF2 = vcs.pattern.playfield3;
 
-let ENAM1 = vcs.pattern.missile1;
+let ENAM1 = vcs.pattern.missile2;
 let ENABL = vcs.pattern.ball;
 //let ENABL = vcs.pattern.missile1;
 let CXP0FB = vcs.collision.player1_vs_playfield;

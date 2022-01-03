@@ -579,7 +579,7 @@ SetMarioGraphicPointers:
 
   a = marioColorPointerLSB[x]; //   lda marioColorPointerLSB,x
   a = a -#  (WALKWAY_HEIGHT+1); //sbc #WALKWAY_HEIGHT+1
-  marioColorPointerLSBM1[x] = a; //   sta marioColorPointerLSB-1,x
+  marioColorPointerLSBm1A[x] = a; //   sta marioColorPointerLSB-1,x
   a = marioGraphicPointer;  //   lda marioGraphicPointer
   carry = true; //   sec
   a = a -# ( WALKWAY_HEIGHT+1); //   sbc #WALKWAY_HEIGHT+1
@@ -589,7 +589,7 @@ LF32A:
   temp--; //   dec temp
   goto LF336 if negative; //   bmi LF336
   a = (marioGraphicPointerB as *u8)[y]; //   lda (marioGraphicPointer),y
-  zpMarioGraphics[y] = a; //   sta zpMarioGraphics,y
+  zpMarioGraphicsA[y] = a; //   sta zpMarioGraphics,y
   y--; //   dey
   goto LF32A if !negative; //   bpl LF32A
 
@@ -598,7 +598,7 @@ LF336:
   temp = a; //   sta temp
   a = 0x00; //   lda #$00
 LF33C:
-  zpMarioGraphics[y] = a; //   sta zpMarioGraphics,y
+  zpMarioGraphicsA[y] = a; //   sta zpMarioGraphics,y
   y--; //   dey
   temp--; //   dec temp
   goto LF33C if !negative; //   bpl LF33C
@@ -1362,7 +1362,7 @@ drawMario_a:
 skipMarioDraw_a:
   VSYNCA[y] = x; //   stx VSYNC,y                ; 4 = @12      waste a cycle and store the byte in GRP0 (y = #$1B)
   x = (NUM_WALKWAYS + 1); // ldx #NUM_WALKWAYS+1        ; 2
-  EnterKernel(); // jmp EnterKernel            ; 3
+  goto EnterKernel; // jmp EnterKernel            ; 3
 /*
 ;
 ; I'm not sure what the following byte is used for. Tracing the program shows that
@@ -1382,16 +1382,16 @@ skipMarioDraw_a:
 
 EndKernel:
   goto MainLoop; //   jmp MainLoop
-/*
-BarrelHammerKernel SUBROUTINE
-   stx PF2                    ; 3 = @58
-   */
+
+#[fallthrough] func BarrelHammerKernel() { // SUBROUTINE
+   PF2 = x; //stx PF2                    ; 3 = @58
+}
 in rom @ ROMADDR + 0x7A9 {
 JumpBarrelHammerKernel:
-  a = (marioColorPointer as *u8)[y];//   lda (marioColorPointer),y  ; 5
+  a = (marioColorPointeru16 as *u8)[y];//   lda (marioColorPointer),y  ; 5
   PF1 = x; //   stx PF1                    ; 3            clear the playfield registers (x = 0)
   goto skipMarioDraw3 if zero;//   beq .skipMarioDraw         ; 2³
-  zpMarioGraphics[y] = x; //   ldx zpMarioGraphics,y      ; 4
+  x = zpMarioGraphicsA[y]; //   ldx zpMarioGraphics,y      ; 4
 }
      
 
@@ -1403,209 +1403,225 @@ skipMarioDraw3:
   ENAM1 = a; //  sta ENAM1                  ; 3 = @11
   a = (ballPointeru16 as *u8)[y]; // lda (ballPointer),y        ; 5
   ENABL = a; // sta ENABL                  ; 3 = @19
-  /* a =  lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @27
-   stx GRP0                   ; 3 = @30
-   lda (pf2Pointer),y         ; 5
-   sta PF2                    ; 3 = @38
-   lda (rightPF1Pointer),y    ; 5
-   ldx #$00                   ; 2
-   sta PF1                    ; 3 = @48
-   dey                        ; 2
-   cpy #WALKWAY_HEIGHT - HAMMER_HEIGHT ; 2
-   bcs BarrelHammerKernel     ; 2³
+  a = (obstaclePointeru16 as *u8)[y]; // lda (obstaclePointer),y    ; 5
+  GRP1 = a; // sta GRP1                   ; 3 = @27
+  GRP0 = x; // stx GRP0                   ; 3 = @30
+  a = (pf2Pointeru16 as *u8)[y]; // lda (pf2Pointer),y         ; 5
+  PF2 = a; // sta PF2                    ; 3 = @38
+  a = (rightPF1Pointeru16 as *u8)[y]; // lda (rightPF1Pointer),y    ; 5
+  x = 0x00; // ldx #$00                   ; 2
+  PF1 = a; // sta PF1                    ; 3 = @48
+  y--; // dey                        ; 2
+  cmp(y, (WALKWAY_HEIGHT - HAMMER_HEIGHT)); //  cpy #WALKWAY_HEIGHT - HAMMER_HEIGHT ; 2
+  goto BarrelHammerKernel if carry; // bcs BarrelHammerKernel     ; 2³
 
-BarrelKernel SUBROUTINE
-   stx PF2                    ; 3
-   lda (marioColorPointer),y  ; 5
-   stx PF0                    ; 3 = @65
-*/
+#[fallthrough] func BarrelKernel() { // SUBROUTINE
+  PF2 = x; //   stx PF2                    ; 3
+  a = (marioColorPointeru16 as *u8)[y]; // lda (marioColorPointer),y  ; 5
+  PF0 = x; // stx PF0                    ; 3 = @65
+}
 JumpBarrelKernel:
-  goto skipMarioDraw if zero; //   beq .skipMarioDraw         ; 2³
-  zpMarioGraphics[y] = x; //   ldx zpMarioGraphics,y      ; 4
-/*
-.skipMarioDraw
-   sta WSYNC
-;--------------------------------------
-   sta COLUP0                 ; 3 = @3
-   stx GRP0                   ; 3 = @6
-   ldx #$00                   ; 2
-   lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @16
-   lda (leftPF1Pointer),y     ; 5
-   sta PF1                    ; 3 = @24
-   lda (pf2Pointer),y         ; 5
-   sta PF2                    ; 3 = @32
-   lda (pf0Pointer),y         ; 5
-   sta PF0                    ; 3 = @40
-   lda (rightPF1Pointer),y    ; 5
-   sta PF1                    ; 3 = @48
-   dey                        ; 2
-   cpy loopCount              ; 3
-   bne BarrelKernel           ; 2³
+  goto skipMarioDraw4 if zero; //   beq .skipMarioDraw         ; 2³
+  x = zpMarioGraphicsA[y]; //   ldx zpMarioGraphics,y      ; 4
 
-ContinueKernel SUBROUTINE
-   lda (marioColorPointer),y  ; 5
-   stx PF2                    ; 3 = @63
-   sta COLUP0,x               ; 4 = @67
-   bne .drawMario             ; 2³
-   sta GRP0,x                 ; 4 = @73
-   beq .skipMarioDraw         ; 3
-.drawMario
-   lda zpMarioGraphics+2      ; 3
-   sta GRP0                   ; 3 = @76
-;--------------------------------------
-.skipMarioDraw
-   stx PF1                    ; 3 = @3
-   stx PF0                    ; 3 = @6
-   lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @14
-   ldx groupCount             ; 3
-   beq EndKernel              ; 2³
-   ldy coarseHorPosP1-1,x     ; 4
-   bmi SkipObstacleMove       ; 2³
-.coarseMoveObstacle
-   dey                        ; 2
-   bpl .coarseMoveObstacle    ; 2³
-   sta RESP1                  ; 3
-   lda fineHorPosP1-1,x       ; 4
-   sta HMP1                   ; 3
+skipMarioDraw4:
+  WSYNC = a;  //   sta WSYNC
+//;--------------------------------------
+   COLUP0 = a; //sta COLUP0                 ; 3 = @3
+   GRP0 = x; //stx GRP0                   ; 3 = @6
+   x=0x00; //ldx #$00                   ; 2
+   a = (obstaclePointeru16 as *u8)[y]; //lda (obstaclePointer),y    ; 5
+   GRP1 = a; //sta GRP1                   ; 3 = @16
+   a = (leftPF1Pointeru16 as *u8)[y]; //lda (leftPF1Pointer),y     ; 5
+   PF1 =a; //sta PF1                    ; 3 = @24
+   a = (pf2Pointeru16 as *u8)[y]; //lda (pf2Pointer),y         ; 5
+   PF2 = a; //sta PF2                    ; 3 = @32
+   a = (pf0Pointeru16 as *u8)[y]; //lda (pf0Pointer),y         ; 5
+   PF0 = a; //sta PF0                    ; 3 = @40
+   a = (rightPF1Pointeru16 as *u8)[y]; //lda (rightPF1Pointer),y    ; 5
+   PF1 = a; //sta PF1                    ; 3 = @48
+   y--; //dey                        ; 2
+   cmp(y,loopCount); //cpy loopCount              ; 3
+   goto BarrelKernel if !zero; //bne BarrelKernel           ; 2³
 
-SkipObstacleMove SUBROUTINE
-   ldy #$01                   ; 2
-   sta WSYNC
-;--------------------------------------
-   sta HMOVE                  ; 3
-   lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @11
-   lda (marioColorPointer),y  ; 5
-   sta.w COLUP0               ; 4 = @20
-   bne .drawMario             ; 2³
-   sta.w GRP0                 ; 4 = @26
-   beq .skipMarioDraw         ; 3            always 0
-.drawMario
-   lda zpMarioGraphics+1      ; 3
-   sta GRP0                   ; 3 = @29
-.skipMarioDraw
-   lda gameScreen             ; 3
-   beq .loadBarrelPFPointers  ; 2³
+#[fallthrough] func ContinueKernel() { // SUBROUTINE
+   a = (marioColorPointeru16 as *u8)[y]; // lda (marioColorPointer),y  ; 5
+   PF2 = x; //stx PF2                    ; 3 = @63
+   COLUP0A[x] = a; //sta COLUP0,x               ; 4 = @67
+   goto drawMario if !zero; //bne .drawMario             ; 2³
+   GRP0A[x] = a; //sta GRP0,x                 ; 4 = @73
+   goto skipMarioDraw if zero; //beq .skipMarioDraw         ; 3
+drawMario:
+   a = zpMarioGraphicsp2; //   lda zpMarioGraphics+2      ; 3
+   GRP0 = a; //sta GRP0                   ; 3 = @76
 
-   ldy rivits-3,x             ; 4 = @38
-   lda FireFoxLeftPF1Table,y  ; 4
-   sta leftPF1Pointer         ; 3
-   lda FireFoxPF2Table,y      ; 4
-   sta pf2Pointer             ; 3
-   lda FireFoxPF0Table,y      ; 4
-   ldy #$00                   ; 2
-   sta pf0Pointer,y           ; 5 = @63
-   beq .skipBarrelPFPointers  ; 2³
-.loadBarrelPFPointers
-   lda BarrelLeftPF1Table-1,x   ; 4 = @39
-   sta leftPF1Pointer         ; 3
-   lda BarrelPF2Table,x       ; 4
-   sta pf2Pointer             ; 3
-   lda BarrelPF0Table,x       ; 4
-   sta pf0Pointer             ; 3
-   lda BarrelRightPF1Table,x  ; 4
-   sta rightPF1Pointer        ; 3
-   dey                        ; 2 = @65
-.skipBarrelPFPointers
-   lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @73 (barrels) @74(firefox)
-   lda (marioColorPointer),y  ; 5
-;--------------------------------------
-   sta.w COLUP0               ; 4 = @5 (barrles) @6(firefox)
-   bne .drawMario_a           ; 2³
-   sta.w GRP0                 ; 4 = @11 (barrels) @12 (firefox)
-   beq .skipDrawMario_a       ; 3
-.drawMario_a
-   lda zpMarioGraphics        ; 3
-   sta GRP0                   ; 3 = @14 (barrels) @15 (firefox)
-.skipDrawMario_a
-   ldy #WALKWAY_HEIGHT        ; 2
-*/
-  #[fallthrough] func EnterKernel () { //EnterKernel
-   a =obstaclePointerLSBm1[x]; //   lda obstaclePointerLSB-1,x                  ; 4
-   obstaclePointer = a ; //sta obstaclePointer        ; 3
-    }
-  /*
-   lda marioColorPointerLSB-1,x                  ; 4
-   sta marioColorPointer      ; 3
-   sta HMCLR                  ; 3   clear horizontal movement
-   dex                        ; 2
-   nop                        ; 2
-   stx groupCount             ; 3
-   cpx #HAMMER_GROUP          ; 2
-   bne .skipHammerKernel      ; 2³
-   ldx #$00                   ; 2
-   jmp (hammerKernelVector)   ; 5
+  
+//;--------------------------------------
+skipMarioDraw:
+  PF1 = x; //    stx PF1                    ; 3 = @3
+  PF0 = x; // stx PF0                    ; 3 = @6
+  a = (obstaclePointeru16 as *u8)[y]; // lda (obstaclePointer),y    ; 5
+  GRP1 = a; // sta GRP1                   ; 3 = @14
+  x = groupCount; // ldx groupCount             ; 3
+  goto EndKernel if zero; // beq EndKernel              ; 2³
+  y = coarseHorPosP1m1A[x]; // ldy coarseHorPosP1-1,x     ; 4
+  goto SkipObstacleMove if negative; // bmi SkipObstacleMove       ; 2³
+coarseMoveObstacle:
+  y--; //   dey                        ; 2
+  goto coarseMoveObstacle if !negative; // bpl .coarseMoveObstacle    ; 2³
+  RESP1 = a; // sta RESP1                  ; 3
+  a = fineHorPosP1m1A[x]; // lda fineHorPosP1-1,x       ; 4
+  HMP1 = a; // sta HMP1                   ; 3
+}
+  
+//#[fallthrough] func 
+SkipObstacleMove:
+  //() { //SUBROUTINE
+  y = 0x01; //   ldy #$01                   ; 2
+  WSYNC = a; // sta WSYNC
+//;--------------------------------------
 
-.skipHammerKernel
-   lda LoopCountTable,x       ; 4
-   sta loopCount              ; 3
-   ldx #$00                   ; 2
-   lda (marioColorPointer),y  ; 5
-   jmp (kernelVector)         ; 5
+  HMOVE = a; //   sta HMOVE                  ; 3
+  a = (obstaclePointeru16 as *u8)[y]; // lda (obstaclePointer),y    ; 5
+  GRP1 = a; // sta GRP1                   ; 3 = @11
+  a = (marioColorPointeru16 as *u8)[y]; // lda (marioColorPointer),y  ; 5
+//}
+//  in rom @ ROMADDR + 0x832 {
+  const  DN832  /*@ ROMADDR + 0x832 */: [u8] = [0x8D, 0x06, 0x00];
+  //  <:tiamirror.COLUP0 = a; // sta.w COLUP0               ; 4 = @20
 
-*/
+  //  }
+  goto drawMarioN if !zero; //   bne .drawMario             ; 2³
+  //nop();
+   const DN837   /*@ ROMADDR + 0x832 */: [u8] = [0x8D, 0x1B, 0x00]; //<:tiamirror.GRP0N = a; // sta.w GRP0                 ; 4 = @26
+  goto skipMarioDrawN if zero; // beq .skipMarioDraw         ; 3            always 0
+drawMarioN:
+  a = zpMarioGraphicsp1; //   lda zpMarioGraphics+1      ; 3
+  GRP0 = a; //   sta GRP0                   ; 3 = @29
+skipMarioDrawN:
+  a = gameScreen; //   lda gameScreen             ; 3
+//}
+  goto loadBarrelPFPointers if zero; //   beq .loadBarrelPFPointers  ; 2³
+
+  y = rivetsm3[x]; // ldy rivits-3,x             ; 4 = @38
+  a = FireFoxLeftPF1Table[y]; // lda FireFoxLeftPF1Table,y  ; 4
+  leftPF1Pointer = a; // sta leftPF1Pointer         ; 3
+  a = FireFoxPF2Table[y]; // lda FireFoxPF2Table,y      ; 4
+  pf2Pointer = a; // sta pf2Pointer             ; 3
+  a = FireFoxPF0Table[y]; // lda FireFoxPF0Table,y      ; 4
+  y = 0x00; // ldy #$00                   ; 2
+  pf0PointerA[y] = a; // sta pf0Pointer,y           ; 5 = @63
+  goto skipBarrelPFPointers if zero; // beq .skipBarrelPFPointers  ; 2³
+loadBarrelPFPointers:
+  a = BarrelLeftPF1Tablem1[x]; //   lda BarrelLeftPF1Table-1,x   ; 4 = @39
+  leftPF1Pointer = a; // sta leftPF1Pointer         ; 3
+  a = BarrelPF2Table[x]; //lda BarrelPF2Table,x       ; 4
+  pf2Pointer = a; //sta pf2Pointer             ; 3
+  a = BarrelPF0Table[x]; // lda BarrelPF0Table,x       ; 4
+  pf0Pointer = a; // sta pf0Pointer             ; 3
+  a = BarrelRightPF1Table[x]; // lda BarrelRightPF1Table,x  ; 4
+  rightPF1Pointer = a; // sta rightPF1Pointer        ; 3
+  y--; // dey                        ; 2 = @65
+skipBarrelPFPointers:
+  a = (obstaclePointeru16 as *u8)[y]; //   lda (obstaclePointer),y    ; 5
+  GRP1 = a; // sta GRP1                   ; 3 = @73 (barrels) @74(firefox)
+  a = (marioColorPointeru16 as *u8)[y]; // lda (marioColorPointer),y  ; 5
+//;--------------------------------------
+    const  DN875  /*@ ROMADDR + 0x832 */: [u8] = [0x8D, 0x06, 0x00]; //<:tiamirror.COLUP0 = a; //   sta.w COLUP0               ; 4 = @5 (barrles) @6(firefox)
+  goto drawMario_a2 if !zero; // bne .drawMario_a           ; 2³
+  <:tiamirror.GRP0 = a; // sta.w GRP0                 ; 4 = @11 (barrels) @12 (firefox)
+  goto skipDrawMario_a2 if zero; // beq .skipDrawMario_a       ; 3
+//  nop();
+drawMario_a2:
+  a = zpMarioGraphics; //   lda zpMarioGraphics        ; 3
+  GRP0 = a; // sta GRP0                   ; 3 = @14 (barrels) @15 (firefox)
+skipDrawMario_a2:
+  y = WALKWAY_HEIGHT; //   ldy #WALKWAY_HEIGHT        ; 2
+
+//  #[fallthrough] func 
+EnterKernel: 
+  //() { //EnterKernel
+  a =obstaclePointerLSBm1[x]; //   lda obstaclePointerLSB-1,x                  ; 4
+  obstaclePointer = a ; //sta obstaclePointer        ; 3
+//    }
+  a = marioColorPointerLSBm1A[x]; //   lda marioColorPointerLSB-1,x                  ; 4
+  marioColorPointer = a; // sta marioColorPointer      ; 3
+  HMCLR = a; // sta HMCLR                  ; 3   clear horizontal movement
+  x--; // dex                        ; 2
+  nop(); // nop                        ; 2
+  groupCount = x; // stx groupCount             ; 3
+  cmp(x,HAMMER_GROUP); // cpx #HAMMER_GROUP          ; 2
+  goto skipHammerKernel if !zero; // bne .skipHammerKernel      ; 2³
+  x = 0x00; // ldx #$00                   ; 2
+//  goto (&hammerKernelVector as func); // jmp (hammerKernelVector)   ; 5
+const hkvd : [u8] = [0x6C, 0xEE,0x00];
+skipHammerKernel:
+  a = LoopCountTable[x]; //   lda LoopCountTable,x       ; 4
+  loopCount = a; // sta loopCount              ; 3
+  x = 0x00; // ldx #$00                   ; 2
+  a = (marioColorPointeru16 as *u8)[y]; // lda (marioColorPointer),y  ; 5
+  const D8A5 : [u8] = [ 0x6C, 0xF0, 0x00] ;//goto (&kernelVector as u16); //   jmp (kernelVector)         ; 5
+
+
 #[fallthrough] func FirefoxHammerKernel() { // SUBROUTINE
   nop(); //   nop                        ; 2 = @54
-  a = (marioColorPointer as *u8)[y]; //   lda (marioColorPointer),y  ; 5
+  a = (marioColorPointeru16 as *u8)[y]; //   lda (marioColorPointer),y  ; 5
   goto drawMario if !zero; //   bne .drawMario             ; 2³
   nop(); //   nop                        ; 2
   goto skipMarioDraw if zero; //   beq .skipMarioDraw         ; 2³
-  }
+  
   
 drawMario:
-  x = zpMarioGraphics[y]; //   ldx zpMarioGraphics,y      ; 4
-  /*
-.skipMarioDraw
-   sta COLUP0                 ; 3 = @69
-   lda FireFoxLeftPF2Data_1,y ; 4
-   sta PF2                    ; 3
-;--------------------------------------
-   stx GRP0                   ; 3 = @3
-   lda (missilePointer),y     ; 5
-   sta ENAM1                  ; 3 = @11
-   lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @19
-   lda (ballPointer),y        ; 5
-   sta ENABL                  ; 3 = @27
-   lda FireFoxLeftPF1Data_1-3,y ; 4
-   sta PF1                    ; 3 = @34
-   lda (marioColorPointer),y  ; 5
-   lda marioColorPointer,y    ; 4
-   ldx #$00                   ; 2
-   dey                        ; 2
-   cpy #WALKWAY_HEIGHT - HAMMER_HEIGHT  ; 2
-   bcs FirefoxHammerKernel    ; 2³
+  x = zpMarioGraphicsA[y]; //   ldx zpMarioGraphics,y      ; 4
+  
+skipMarioDraw:
+  COLUP0 = a; //   sta COLUP0                 ; 3 = @69
+  a = FireFoxLeftPF2Data_1[y]; // lda FireFoxLeftPF2Data_1,y ; 4
+  PF2 = a; // sta PF2                    ; 3
+}
+//;--------------------------------------
+  GRP0 = x; // stx GRP0                   ; 3 = @3
+  a = (missilePointeru16 as *u8)[y]; // lda (missilePointer),y     ; 5
+  ENAM1 = a; // sta ENAM1                  ; 3 = @11
+  a = (obstaclePointeru16 as *u8)[y]; // lda (obstaclePointer),y    ; 5
+  GRP1 = a; // sta GRP1                   ; 3 = @19
+  a = (ballPointeru16 as *u8)[y]; // lda (ballPointer),y        ; 5
+  ENABL = a; // sta ENABL                  ; 3 = @27
+  a = FireFoxLeftPF1Data_1m3[y]; //   lda FireFoxLeftPF1Data_1-3,y ; 4
+  PF1 = a; // sta PF1                    ; 3 = @34
+  a = (marioColorPointeru16 as *u8)[y]; // lda (marioColorPointer),y  ; 5
+  a = marioColorPointerA[y]; // lda marioColorPointer,y    ; 4
+  x = 0x00; // ldx #$00                   ; 2
+  y--; // dey                        ; 2
+  cmp(y, ( WALKWAY_HEIGHT - HAMMER_HEIGHT )); //cpy #WALKWAY_HEIGHT - HAMMER_HEIGHT  ; 2
+  goto FirefoxHammerKernel if carry; // bcs FirefoxHammerKernel    ; 2³
 
-FirefoxKernel SUBROUTINE
-   lda (marioColorPointer),y  ; 5
-*/
+#[fallthrough] func FirefoxKernel() { // SUBROUTINE
+  a = (marioColorPointeru16 as *u8)[y]; //   lda (marioColorPointer),y  ; 5
+}
 JumpFirefoxKernel:
   goto skipMarioDraw if zero; //   beq .skipMarioDraw         ; 2³
-  x = zpMarioGraphics[y]; //   ldx zpMarioGraphics,y      ; 4
+  x = zpMarioGraphicsA[y]; //   ldx zpMarioGraphics,y      ; 4
 skipMarioDraw:
   WSYNC = a; //   sta WSYNC
-/*;--------------------------------------
-   sta COLUP0                 ; 3 = @3
-   stx GRP0                   ; 3 = @6
-   lda (obstaclePointer),y    ; 5
-   sta GRP1                   ; 3 = @14
-   lda (leftPF1Pointer),y     ; 5
-   sta PF1                    ; 3 = @22
-   lda (pf2Pointer),y         ; 5
-   sta PF2                    ; 3 = @30
-   ldx #$00                   ; 2
-   lda (pf0Pointer),y         ; 5
-   lda (pf0Pointer),y         ; 5
-   dey                        ; 2
-   cpy loopCount              ; 3
-   sta PF2                    ; 3 = @50
-   bne FirefoxKernel          ; 2³
-   jmp ContinueKernel         ; 3
-*/
+//;--------------------------------------
+  COLUP0 = a; //   sta COLUP0                 ; 3 = @3
+  GRP0 = x; // stx GRP0                   ; 3 = @6
+  a = (obstaclePointeru16 as *u8)[y]; // lda (obstaclePointer),y    ; 5
+  GRP1 = a; // sta GRP1                   ; 3 = @14
+  a = (leftPF1Pointeru16 as *u8)[y]; // lda (leftPF1Pointer),y     ; 5
+  PF1 = a; // sta PF1                    ; 3 = @22
+  a = (pf2Pointeru16 as *u8)[y]; // lda (pf2Pointer),y         ; 5
+  PF2 = a; // sta PF2                    ; 3 = @30
+  x = 0x00; // ldx #$00                   ; 2
+  a = (pf0Pointeru16 as *u8)[y]; //lda (pf0Pointer),y         ; 5
+  a = (pf0Pointeru16 as *u8)[y]; // lda (pf0Pointer),y         ; 5
+  y--; // dey                        ; 2
+  cmp(y,loopCount); // cpy loopCount              ; 3
+  PF2 = a; // sta PF2                    ; 3 = @50
+  goto FirefoxKernel if !zero; // bne FirefoxKernel          ; 2³
+  goto ContinueKernel; // jmp ContinueKernel         ; 3
+
 const  LF900 @ ROMADDR + 0x900: [u8] = [
   0x30,0x50,0x70,0x90,0xB0,0xD0,0xD0,0xD0,0xFF,0xFF
   ];
@@ -1648,7 +1664,7 @@ x = 0x0A; //   ldx #$0A
   y = 0x00; //   ldy #$00
   a = gameState; //   lda gameState
   goto BCD2DigitPtrs if !negative; //   bpl BCD2DigitPtrs
-  y = (&bonusTimer as u8 - &playerScorem1 as u8); //   ldy #bonusTimer - playerScore - 1      ; set y to have an offset to the number of lives
+  y = 0x1c; //(&bonusTimer as u8 - &playerScorem1 as u8 - 1 as u8); //   ldy #bonusTimer - playerScore - 1      ; set y to have an offset to the number of lives
 /*
 ;---------------------------------------------------------------BCD2DigitPtrs
 ;
@@ -1799,20 +1815,21 @@ const ClimbingMarioSprite : [u8] = [
   0x60, // ; | XX     | $F9C2
   0x00, // ; |        | $F9C3
 ];
-/*const JumpingSoundFrequency
-   .byte $0F,$0F,$0F,$0F,$0F
-   .byte $0F,$0E,$0D,$0D,$0D
-   .byte $0E,$0F,$0F,$0F,$0F
-   .byte $0F,$0E,$0D,$0D,$0E
+const JumpingSoundFrequency @ ROMADDR + 0x9C4 : [u8] = [
+  0x0F,0x0F,0x0F,0x0F,0x0F,
+  0x0F,0x0E,0x0D,0x0D,0x0D,
+  0x0E,0x0F,0x0F,0x0F,0x0F,
+  0x0F,0x0E,0x0D,0x0D,0x0E
+]; 
 
-JumpingSoundFrequency2
-   .byte $0F,$0F,$0F,$0F
-   .byte $0E,$0D,$0E,$0F
-   .byte $0F,$0F,$0E,$0F
+const JumpingSoundFrequency2 @ ROMADDR + 0x9D8 : [u8] = [
+  0x0F,0x0F,0x0F,0x0F,
+  0x0E,0x0D,0x0E,0x0F,
+  0x0F,0x0F,0x0E,0x0F
+];
 
-ObstacleColor
-   .byte ORANGE                     ; color of hammer handle and obstacles
-*/
+const ObstacleColor @ ROMADDR + 0x9E4 : u8 = ORANGE; //   .byte ORANGE                     ; color of hammer handle and obstacles
+  
 const GirlfriendColorsm2 @ ROMADDR + 0x9E3 : [u8] = [];
 
 const GirlfriendColors @ ROMADDR + 0x9E5 : [u8] = [
@@ -1844,7 +1861,7 @@ in rom @ ROMADDR + 0x9F5 {
 
 storeMarioGraphicLoop:
   a = (marioGraphicPointeru16 as *u8)[y]; //   lda (marioGraphicPointer),y
-  zpMarioGraphics[y] = a; // sta zpMarioGraphics,y
+  zpMarioGraphicsA[y] = a; // sta zpMarioGraphics,y
   y--; //   dey
   goto storeMarioGraphicLoop if !negative; //   bpl .storeMarioGraphicLoop
   return; //   rts
@@ -1886,135 +1903,142 @@ InitializationTable2
    .byte $04
    .byte $05
 */
-/*
-FireFoxLeftPF1Data_1
-   .byte $0F ; |    XXXX|
-   .byte $0A ; |    X X |
-   .byte $0F ; |    XXXX|
-   .byte $0A ; |    X X |
-   .byte $0F ; |    XXXX|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $02 ; |      X |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $02 ; |      X |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $02 ; |      X |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $02 ; |      X |
-   .byte $00 ; |        |
+const FireFoxLeftPF1Data_1m3 @ ROMADDR + 0xA11 : [u8] = [];
+const FireFoxLeftPF1Data_1 @ ROMADDR + 0xA14 : [u8] = [ //FireFoxLeftPF1Data_1
+  0x0F, // ; |    XXXX|
+  0x0A, // ; |    X X |
+  0x0F, // ; |    XXXX|
+  0x0A, // ; |    X X |
+  0x0F, // ; |    XXXX|
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x02, // ; |      X |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x02, // ; |      X |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x02, // ; |      X |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x02, // ; |      X |
+  0x00, // ; |        |
+];
+  
+const FireFoxLeftPF2Data_1 @ ROMADDR + 0xA2A : [u8] = [ //FireFoxLeftPF2Data_1
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x02, // ; |      X |
+  0xFD, // ; |XXXXXX X|
+  0x55, // ; | X X X X|
+  0xFD, // ; |XXXXXX X|
+  0x55, // ; | X X X X|
+  0xFF, // ; |XXXXXXXX|
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x08, // ; |    X   |
+  0x00, // ; |        |
+];
 
-FireFoxLeftPF2Data_1
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $02 ; |      X |
-   .byte $FD ; |XXXXXX X|
-   .byte $55 ; | X X X X|
-   .byte $FD ; |XXXXXX X|
-   .byte $55 ; | X X X X|
-   .byte $FF ; |XXXXXXXX|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
+const FireFoxLeftPF2Data_0 @ ROMADDR + 0xA43 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0xFF, // ; |XXXXXXXX|
+0x54, // ; | X X X  |
+0xFF, // ; |XXXXXXXX|
+0x54, // ; | X X X  |
+0xFF, // ; |XXXXXXXX|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+];
 
-FireFoxLeftPF2Data_0
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $FF ; |XXXXXXXX|
-   .byte $54 ; | X X X  |
-   .byte $FF ; |XXXXXXXX|
-   .byte $54 ; | X X X  |
-   .byte $FF ; |XXXXXXXX|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
+const FireFoxLeftPF1Data_0 @ ROMADDR + 0xA53 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+]; 
 
-FireFoxLeftPF1Data_0
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-
-FireFoxLeftPF2Data_2
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $FD ; |XXXXXX X|
-   .byte $55 ; | X X X X|
-   .byte $FD ; |XXXXXX X|
-   .byte $55 ; | X X X X|
-   .byte $FD ; |XXXXXX X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $08 ; |    X   |
-
+const FireFoxLeftPF2Data_2 @ ROMADDR + 0xA6E : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0xFD, // ; |XXXXXX X|
+0x55, // ; | X X X X|
+0xFD, // ; |XXXXXX X|
+0x55, // ; | X X X X|
+0xFD, // ; |XXXXXX X|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x08, // ; |    X   |
+];
+  
+  
+  /*
 ;===============================================================================
 ; R O M - C O D E (Part 4)
 ;===============================================================================
@@ -2115,15 +2139,20 @@ const FirefoxDownLadderTable : [u8] = [
   
 
 
- const KernelVectorTable : [u8] = [
-   <:(JumpBarrelHammerKernel),
-   >:(JumpBarrelHammerKernel),
-/*   JumpBarrelKernel as u16,   
-   FirefoxHammerKernel as u16,
-   JumpFirefoxKernel as u16
-   */
-   ];
-const BarrelPFDataTablem5 @ ROMADDR + 0xAF2: [u8] = [];
+ const KernelVectorTable @ ROMADDR + 0xAEF : [u8] = [
+//   0xA9, 0xF7,
+//   0xD8, 0xF7,
+   <:(JumpBarrelHammerKernel as u16),
+   >:(JumpBarrelHammerKernel as u16),
+   <:(JumpBarrelKernel as u16),
+   >:(JumpBarrelKernel as u16),
+   <:(FirefoxHammerKernel as u16),
+   >:(FirefoxHammerKernel as u16),
+   <:(JumpFirefoxKernel as u16),
+   >:(JumpFirefoxKernel as u16),
+];
+
+  const BarrelPFDataTablem5 @ ROMADDR + 0xAF2: [u8] = [];
 
 const BarrelPFDataTable @ ROMADDR + 0xAF7: [*const [u8];4] = [
   &BarrelRightPF1Data_6,
@@ -2136,17 +2165,19 @@ const BarrelPFDataTable @ ROMADDR + 0xAF7: [*const [u8];4] = [
 ; I'm not sure what the following byte is used for. Tracing the program shows that
 ; this byte is never accessed. They're here to make the compiled ROM identical to
 ; the cart.
-;
-   IF NTSC
+;*/
+//   IF NTSC
+    #[compile_if(NTSC)] var b2a @ ROMADDR + 0xAFF : u8 = 0x2A; //   ldx #$11
 
-   .byte $2A
+//   .byte $2A
 
-   ELSE
+//   ELSE
 
-   .byte $00
+  // .byte $00
+    #[compile_if(!NTSC)] var b2a @ ROMADDR + 0xAFF : u8 = 0x00; //   ldx #$11
 
-   ENDIF
-*/
+//   ENDIF
+
   
 const UpLadderTable @ ROMADDR + 0xB00: [u8] = [
 //BarrelUpLadderTable
@@ -2344,13 +2375,13 @@ const DonkeyKong @ ROMADDR+ 0xB98 : [u8] = [
   ];
 const ObstacleTable @ ROMADDR + 0xBAC : [u8] = [
    <: ( &HorizontalBarrelSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT),
-//   <: ( &FallingBarrelSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT),
-//  <: ( &FirefoxSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT)
+   <: ( &FallingBarrelSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT),
+  <: ( &FirefoxSprite as u16 + OBSTACLE_HEIGHT - WALKWAY_HEIGHT)
   ];
 
 
 const FireFoxLeftPF1Table @ ROMADDR + 0xBAF : [u8] = [
-  0x11, 0x11, 0x11, 0x11, 0x11, 0x53, 0x11,
+  0x53, 0x11, 0x11, 0x11, 0x11, 0x11, 0x53, 0x11,
 0x11, 0x11, 0x11, 0x11, 0x53, 0x11, 0x11, 
 0x11, 0x11, 0x11, 0x53, 0x11, 0x11, 0x11, 
 0x11, 0x11
@@ -2448,14 +2479,14 @@ const LivesPFPattern @ ROMADDR + 0xBF7 : [u8] = [
   0x15, // ; |   X X X|           three lives
 ];
 
-  #[compile_if(NTSC)] const pat : [u8] = [ 0x89,0xA5,0x0D,0xE9,0x00];
+  #[compile_if(NTSC)] const pat @ ROMADDR + 0xBFB: [u8] = [ 0x89,0xA5,0x0D,0xE9,0x00];
 /*   IF NTSC
 
    .byte $89,$A5,$0D,$E9,$00
 
    ELSE
 */
-  #[compile_if(!NTSC)] const pat : [u8] = [ 0x00,0xFF,0xFF,0x00,0x00];
+  #[compile_if(!NTSC)] const pat @ ROMADDR + 0xBFB: [u8] = [ 0x00,0xFF,0xFF,0x00,0x00];
 
 //   .byte $00,$FF,$FF,$00,$00
 
@@ -2564,41 +2595,56 @@ HorizontalBarrelSprite
    .byte $DF ; |XX XXXXX| $FC7F
    .byte $76 ; | XXX XX | $FC80
    .byte $3C ; |  XXXX  | $FC81
+*/
+const FallingBarrelSprite @ ROMADDR + 0xC82 : [u8] = [
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,
 
-FallingBarrelSprite
-
-   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
-      .byte $00                     ; blank line
-   REPEND
-
-   .byte $7E ; | XXXXXX | $FC9F
-   .byte $99 ; |X  XX  X| $FCA0
-   .byte $BD ; |X XXXX X| $FCA1
-   .byte $81 ; |X      X| $FCA2
-   .byte $BD ; |X XXXX X| $FCA3
-   .byte $99 ; |X  XX  X| $FCA4
-   .byte $7E ; | XXXXXX | $FCA5
-   .byte $00 ; |        | $FCA6
-
-FirefoxSprite
-
-   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
-      .byte $00                     ; blank line
-   REPEND
-
-   .byte $38 ; |  XXX   | $FCC4
-   .byte $7E ; | XXXXXX | $FCC5
-   .byte $FF ; |XXXXXXXX| $FCC6
-   .byte $FF ; |XXXXXXXX| $FCC7
-   .byte $71 ; | XXX   X| $FCC8
-   .byte $AA ; |X X X X | $FCC9
-   .byte $AA ; |X X X X | $FCCA
-   .byte $71 ; | XXX   X| $FCCB
-
-   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+  /*   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
       .byte $00                     ; blank line
    REPEND
 */
+  0x7E, // ; | XXXXXX | $FC9F
+  0x99, // ; |X  XX  X| $FCA0
+  0xBD, // ; |X XXXX X| $FCA1
+  0x81, // ; |X      X| $FCA2
+  0xBD, // ; |X XXXX X| $FCA3
+  0x99, // ; |X  XX  X| $FCA4
+  0x7E, // ; | XXXXXX | $FCA5
+  0x00, // ; |        | $FCA6
+];
+
+const FirefoxSprite @ ROMADDR + 0xCA7 : [u8] = [
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,
+
+/*   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+*/
+    0x38, // ; |  XXX   | $FCC4
+    0x7E, // ; | XXXXXX | $FCC5
+    0xFF, // ; |XXXXXXXX| $FCC6
+    0xFF, // ; |XXXXXXXX| $FCC7
+    0x71, // ; | XXX   X| $FCC8
+    0xAA, // ; |X X X X | $FCC9
+    0xAA, // ; |X X X X | $FCCA
+    0x71, // ; | XXX   X| $FCCB
+
+/*   REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+      .byte $00                     ; blank line
+   REPEND
+*/
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00, 0x00,
+
+  ];
 const FirefoxVerPos @ ROMADDR + 0xCE9 : [u8] = [
 0x60,0x44,0x28,TOP_PLATFORM_VALUE
 ];
@@ -2616,15 +2662,14 @@ in rom @ ROMADDR + 0xCED {
   y = <:(&HorizontalColors); //   ldy #<HorizontalColors
 }
 loop:
-  /*
-   sta verPosP1,x                   ; clear out obstacle vert position, jumpHangTime,
-   dex                              ; and hammerTime
-   bmi .doneStartNewScreen
-   sty marioColorPointerLSB,x
-   bpl .loop
-.doneStartNewScreen
-   jmp InitializeGame
-;
+  verPosP1A[x] = a;  //   sta verPosP1,x                   ; clear out obstacle vert position, jumpHangTime,
+  x--; // dex                              ; and hammerTime
+  goto doneStartNewScreen if negative; // bmi .doneStartNewScreen
+  marioColorPointerLSB[x] = y; // sty marioColorPointerLSB,x
+  goto loop if !negative; //   bpl .loop
+doneStartNewScreen:
+  goto InitializeGame; //   jmp InitializeGame
+/*;
 ; The following byte seems to just be a filler byte to push AudioFrequencyTable to the
 ; next page. I kept the values intact so the compiled ROM is identical to the cart.
 ;
@@ -2643,7 +2688,20 @@ loop:
 
 //   ENDIF
 
-const AudioFrequencyTable @ ROMADDR + 0xD00: [u16] = [
+const AudioFrequencyTable @ ROMADDR + 0xD00: [u8] = [
+  <:(&JumpingSoundFrequency as u16),
+  >:(&JumpingSoundFrequency as u16),
+  <:(&WalkingSoundFrequency as u16),
+  >:(&WalkingSoundFrequency as u16),
+  <:(&ScoringSoundFrequency as u16),
+  >:(&ScoringSoundFrequency as u16),
+  <:(&DeathSoundFrequency as u16),
+  >:(&DeathSoundFrequency as u16),
+  <:(&JumpingSoundFrequency2 as u16),
+  >:(&JumpingSoundFrequency2 as u16),
+  <:(&LF900 as u16),
+  >:(&LF900 as u16),
+  
 //  JumpingSoundFrequency,
 //  WalkingSoundFrequency,
 //  ScoringSoundFrequency,
@@ -2651,12 +2709,15 @@ const AudioFrequencyTable @ ROMADDR + 0xD00: [u16] = [
 //  JumpingSoundFrequency2,
 //  LF900
 ];
-  /*
-DeathSoundFrequency
+  
+const DeathSoundFrequency @ ROMADDR + 0xD0C : [u8] = [
+];
+  
+#[compile_if(NTSC)] const DSFN @ ROMADDR + 0xD0C : [u8] = [0x0C,0x0C,0x0C,0x0C,0x11,0x11,0x11,0x08,0x08,0x08,0x0B,0x0A,0x09,0x08,0x07,0x06,0x05];
 
-   IF NTSC
+//   IF NTSC
 
-   .byte $0C,$0C,$0C,$0C
+/*   .byte $0C,$0C,$0C,$0C
    .byte $11,$11,$11
    .byte $08,$08,$08
    .byte $0B,$0A,$09,$08,$07,$06,$05
@@ -2666,125 +2727,126 @@ DeathSoundFrequency
    .byte $0C,$0C,$0C,$11,$11,$08,$08,$0B,$0A,$09,$08,$07,$06,$05,$00,$00,$00
 
    ENDIF
-
-BarrelRightPF1Data_1
-   .byte $FF ; |XXXXXXXX|
-   .byte $FF ; |XXXXXXXX|
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $14 ; |   X X  |
-   .byte $3C ; |  XXXX  |
-   .byte $E8 ; |XXX X   |
-   .byte $54 ; | X X X  |
-   .byte $AC ; |X X XX  |
-   .byte $78 ; | XXXX   |
-   .byte $C0 ; |XX      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $C0 ; |XX      |
-   .byte $78 ; | XXXX   |
-   .byte $AF ; |X X XXXX|
-   .byte $55 ; | X X X X|
-   .byte $EA ; |XXX X X |
-   .byte $3D ; |  XXXX X|
-   .byte $07 ; |     XXX|
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $14 ; |   X X  |
-   .byte $3C ; |  XXXX  |
-   .byte $E8 ; |XXX X   |
-   .byte $54 ; | X X X  |
-   .byte $AC ; |X X XX  |
-   .byte $78 ; | XXXX   |
-   .byte $C0 ; |XX      |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $C0 ; |XX      |
-   .byte $78 ; | XXXX   |
-   .byte $AF ; |X X XXXX|
-   .byte $55 ; | X X X X|
-   .byte $EA ; |XXX X X |
-   .byte $3D ; |  XXXX X|
-   .byte $07 ; |     XXX|
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |       
-   */
+*/
+  
+const BarrelRightPF1Data_1 @ ROMADDR + 0xD1D : [u8] = [
+0xFF, // ; |XXXXXXXX|
+0xFF, // ; |XXXXXXXX|
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x14, // ; |   X X  |
+0x3C, // ; |  XXXX  |
+0xE8, // ; |XXX X   |
+0x54, // ; | X X X  |
+0xAC, // ; |X X XX  |
+0x78, // ; | XXXX   |
+0xC0, // ; |XX      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0xC0, // ; |XX      |
+0x78, // ; | XXXX   |
+0xAF, // ; |X X XXXX|
+0x55, // ; | X X X X|
+0xEA, // ; |XXX X X |
+0x3D, // ; |  XXXX X|
+0x07, // ; |     XXX|
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x14, // ; |   X X  |
+0x3C, // ; |  XXXX  |
+0xE8, // ; |XXX X   |
+0x54, // ; | X X X  |
+0xAC, // ; |X X XX  |
+0x78, // ; | XXXX   |
+0xC0, // ; |XX      |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0xC0, // ; |XX      |
+0x78, // ; | XXXX   |
+0xAF, // ; |X X XXXX|
+0x55, // ; | X X X X|
+0xEA, // ; |XXX X X |
+0x3D, // ; |  XXXX X|
+0x07, // ; |     XXX|
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |    
+  ];
 const BarrelRightPF1Data_6 @ ROMADDR + 0xD91: [u8] = [
   0x00, // ; |        |
   0x00, // ; |        |
@@ -2850,30 +2912,35 @@ const Girlfriend @ ROMADDR + 0xDAC : [u8] = [
 ;
 */
 const LadderHorizValues @ ROMADDR + 0xDC0: [u8] = [
-0x6D,                   //     ; walkway 0
-0x51,0x31,              //     ; walkway 1
-0x59,0x6D,              //     ; walkway 2
-0x45,0x31,              //     ; walkway 3
-0x6D,                   //     ; walkway 4
-0x4D                    //     ; walkway 5
-];
-  /*
+  0x6D,                   //     ; walkway 0
+  0x51,0x31,              //     ; walkway 1
+  0x59,0x6D,              //     ; walkway 2
+  0x45,0x31,              //     ; walkway 3
+  0x6D,                   //     ; walkway 4
+  0x4D,                    //     ; walkway 5
+    /*
 ;
 ; going down -- reverse order
 ;
-   .byte $4D                        ; walkway 5
-   .byte $65                        ; walkway 4
-   .byte $41,$49                    ; walkway 3
-   .byte $7B,$23                    ; walkway 2
-   .byte $7B,$23                    ; walkway 1
-   .byte $7B                        ; walkway 0
+*/
+  0x4D,   //                    ; walkway 5
+  0x65,     //                  ; walkway 4
+  0x41,0x49,//                    ; walkway 3
+  0x7B,0x23,//                    ; walkway 2
+  0x7B,0x23,//                    ; walkway 1
+  0x7B      //                  ; walkway 0
 
-.firefoxLadderHorizValues
-   .byte $29,$3D,$61,$75
-   .byte $29,$3D,$61,$75
-   .byte $29,$3D,$61,$75
-   .byte $29,$3D,$61,$75
+];
 
+  
+const firefoxLadderHorizValues @ ROMADDR + 0xDD2 : [u8] = [
+  0x29,0x3D,0x61,0x75,
+  0x29,0x3D,0x61,0x75,
+  0x29,0x3D,0x61,0x75,
+  0x29,0x3D,0x61,0x75,
+];
+  
+  /*
 ;===============================================================================
 ; R O M - C O D E (Part 6)
 ;===============================================================================
@@ -2897,35 +2964,37 @@ in rom @ ROMADDR + 0xDE2 {
   
 coarseMoveLoop2:
   a = a -# 0x0F; //   sbc #$0F
-  /*
-   bcs .coarseMoveLoop
-   eor #$0F
-   asl
-   asl
-   asl
-   asl
-   adc #HMOVE_R7
-   sta RESP0,x
-   sta WSYNC
-   sta HMP0,x
-   rts
-   */
+  goto coarseMoveLoop2 if carry; //   bcs .coarseMoveLoop
+  a = a ^ 0x0F; //   eor #$0F
+  a = a << 1; // asl
+  a = a << 1; // asl
+  a = a << 1; // asl
+  a = a << 1; // asl
+  a = a +# HMOVE_R7; // adc #HMOVE_R7
+  RESP0A[x] = a; // sta RESP0,x
+  WSYNC = a; // sta WSYNC
+  HMP0A[x] = a; // sta HMP0,x
+  return;//   rts
 }
   const RampHorizValues @ ROMADDR + 0xDF8 : [u8] = [ //RampHorizValues
    0x75,0x69,0x5D,0x51,0x45,0x3A,0x2D
     ];
+  
+  
   /*
 
    IF NTSC
+   */
+#[compile_if(NTSC)] const pat88 @ ROMADDR + 0xDFF : [u8] = [0x88]; // .byte $88
 
-   .byte $88
+//   ELSE
 
-   ELSE
+  #[compile_if(!NTSC)] const pat88  @ ROMADDR + 0xDFF : [u8] = [0x00]; // .byte $88
 
-   .byte $00
+//   .byte $00
 
-   ENDIF
-*/
+//   ENDIF
+
 const MarioColorTable @ ROMADDR + 0xE00: [u8] = [
   <:(&HorizontalColors),
   <:(&HorizontalColors),
@@ -2935,10 +3004,17 @@ const MarioColorTable @ ROMADDR + 0xE00: [u8] = [
   <:(&VerticalColors),
   <:(&HorizontalColors),
 ];
+
+const WalkingSoundFrequency @ ROMADDR + 0xE07 : [u8] = [ 0x1A ];
   /*
 WalkingSoundFrequency
    .byte $1A
+*/
+  const BarrelRightPF1Table @ ROMADDR + 0xE08 : [u8] = [
+0x1C, 0x10, 0x2C, 0x40, 0x5C, 0x75, 0x91
+];
 
+  /*
 BarrelRightPF1Table
    .byte <BarrelRightPF1Data_0
    .byte <BarrelRightPF1Data_1-13
@@ -2947,80 +3023,86 @@ BarrelRightPF1Table
    .byte <BarrelRightPF1Data_4
    .byte <BarrelRightPF1Data_5
    .byte <BarrelRightPF1Data_6
-
-BarrelLeftPF1Data_0
-   .byte $0F ; |    XXXX|
-   .byte $0F ; |    XXXX|
-   .byte $00 ; |        |
-   .byte $06 ; |     XX |
-   .byte $00 ; |        |
-   .byte $06 ; |     XX |
-   .byte $00 ; |        |
-   .byte $06 ; |     XX |
-   .byte $00 ; |        |
-   .byte $06 ; |     XX |
-   .byte $00 ; |        |
-   .byte $06 ; |     XX |
-   .byte $00 ; |        |
-BarrelPF0Data_3
-   .byte $06 ; |     XX |
-BarrelLeftPF1Data_2
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $01 ; |       X|
-   .byte $0F ; |    XXXX|
-   .byte $0A ; |    X X |
-   .byte $05 ; |     X X|
-   .byte $0B ; |    X XX|
-   .byte $0E ; |    XXX |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-BarrelPF0Data_4
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-
-BarrelLeftPF1Data_3
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $02 ; |      X |
-   .byte $03 ; |      XX|
-   .byte $01 ; |       X|
-   .byte $02 ; |      X |
-   .byte $03 ; |      XX|
-   .byte $01 ; |       X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-
-BarrelPF0Data_5
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
 */
+const BarrelLeftPF1Data_0 @ ROMADDR + 0xE0F : [u8] = [
+  0x0F, // ; |    XXXX|
+  0x0F, // ; |    XXXX|
+  0x00, // ; |        |
+  0x06, // ; |     XX |
+  0x00, // ; |        |
+  0x06, // ; |     XX |
+  0x00, // ; |        |
+  0x06, // ; |     XX |
+  0x00, // ; |        |
+  0x06, // ; |     XX |
+  0x00, // ; |        |
+  0x06, // ; |     XX |
+  0x00, // ; |        |
+  ];
+const BarrelPF0Data_3 @ ROMADDR + 0xE1C : [u8] = [
+   0x06, // ; |     XX |
+  ];
+
+  const BarrelLeftPF1Data_2 @ ROMADDR + 0xE1D : [u8] = [
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x01, // ; |       X|
+    0x0F, // ; |    XXXX|
+    0x0A, // ; |    X X |
+    0x05, // ; |     X X|
+    0x0B, // ; |    X XX|
+    0x0E, // ; |    XXX |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    0x00, // ; |        |
+    ];
+const BarrelPF0Data_4 @ ROMADDR + 0xE34 : [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+];
+const BarrelLeftPF1Data_3 @ ROMADDR + 0xE36 : [u8] = [  
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x02, // ; |      X |
+  0x03, // ; |      XX|
+  0x01, // ; |       X|
+  0x02, // ; |      X |
+  0x03, // ; |      XX|
+  0x01, // ; |       X|
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+];
+
+const BarrelPF0Data_5 @ ROMADDR + 0xE49 : [u8] = [
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+  0x00, // ; |        |
+];
+  
 const BarrelPF2Data_0 @ ROMADDR + 0xE4F: [u8] = [
   0x00, // ; |        |
   0x00, // ; |        |
@@ -3051,121 +3133,121 @@ const BarrelPF2Data_0 @ ROMADDR + 0xE4F: [u8] = [
   0x00, // ; |        |
   0x08, // ; |    X   |
   ];
-/*
-BarrelPF2Data_2
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-BarrelPF0Data_1
-   .byte $00 ; |        |
-   .byte $E0 ; |XXX     |
-   .byte $BC ; |X XXXX  |
-   .byte $57 ; | X X XXX|
-   .byte $AA ; |X X X X |
-   .byte $F5 ; |XXXX X X|
-   .byte $1E ; |   XXXX |
-   .byte $03 ; |      XX|
-   .byte $00 ; |        |
-   .byte $01 ; |       X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $01 ; |       X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $01 ; |       X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $01 ; |       X|
-
-BarrelPF2Data_3
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $01 ; |       X|
-   .byte $03 ; |      XX|
-   .byte $1E ; |   XXXX |
-   .byte $F5 ; |XXXX X X|
-   .byte $AA ; |X X X X |
-   .byte $57 ; | X X XXX|
-   .byte $BC ; |X XXXX  |
-   .byte $E0 ; |XXX     |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-
-BarrelPF2Data_4
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $F0 ; |XXXX    |
-   .byte $BC ; |X XXXX  |
-   .byte $57 ; | X X XXX|
-   .byte $AA ; |X X X X |
-   .byte $F5 ; |XXXX X X|
-   .byte $1E ; |   XXXX |
-   .byte $03 ; |      XX|
-   .byte $00 ; |        |
-   .byte $21 ; |  X    X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $21 ; |  X    X|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $21 ; |  X    X|
-
-BarrelPF2Data_5
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $21 ; |  X    X|
-   .byte $03 ; |      XX|
-   .byte $1E ; |   XXXX |
-   .byte $F5 ; |XXXX X X|
-   .byte $AA ; |X X X X |
-   .byte $57 ; | X X XXX|
-   .byte $BC ; |X XXXX  |
-   .byte $E0 ; |XXX     |
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |       
-   */
+const BarrelPF2Data_2 @ ROMADDR + 0xE6B : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+];
+const BarrelPF0Data_1 @ ROMADDR + 0xE71 : [u8] = [
+0x00, // ; |        |
+0xE0, // ; |XXX     |
+0xBC, // ; |X XXXX  |
+0x57, // ; | X X XXX|
+0xAA, // ; |X X X X |
+0xF5, // ; |XXXX X X|
+0x1E, // ; |   XXXX |
+0x03, // ; |      XX|
+0x00, // ; |        |
+0x01, // ; |       X|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x01, // ; |       X|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x01, // ; |       X|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x01, // ; |       X|
+];
+const BarrelPF2Data_3 @ ROMADDR + 0xE87 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x01, // ; |       X|
+0x03, // ; |      XX|
+0x1E, // ; |   XXXX |
+0xF5, // ; |XXXX X X|
+0xAA, // ; |X X X X |
+0x57, // ; | X X XXX|
+0xBC, // ; |X XXXX  |
+0xE0, // ; |XXX     |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+];
+const BarrelPF2Data_4 @ ROMADDR + 0xEA0 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0xF0, // ; |XXXX    |
+0xBC, // ; |X XXXX  |
+0x57, // ; | X X XXX|
+0xAA, // ; |X X X X |
+0xF5, // ; |XXXX X X|
+0x1E, // ; |   XXXX |
+0x03, // ; |      XX|
+0x00, // ; |        |
+0x21, // ; |  X    X|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x21, // ; |  X    X|
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x21, // ; |  X    X|
+];
+const BarrelPF2Data_5 @ ROMADDR + 0xEB8 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x21, // ; |  X    X|
+0x03, // ; |      XX|
+0x1E, // ; |   XXXX |
+0xF5, // ; |XXXX X X|
+0xAA, // ; |X X X X |
+0x57, // ; | X X XXX|
+0xBC, // ; |X XXXX  |
+0xE0, // ; |XXX     |
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x80, // ; |X       |     
+]; 
 const BarrelPF0Data_0 @ ROMADDR + 0xED4: [u8] = [
   0x00, // ; |        |
   0x00, // ; |        |
@@ -3183,38 +3265,41 @@ const BarrelPF0Data_0 @ ROMADDR + 0xED4: [u8] = [
   0x00, // ; |        |
   0x00, // ; |        |
 ];
-  /*
-BarrelPF2Data_1       
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |
-   .byte $FF ; |XXXXXXXX|
-   .byte $FF ; |XXXXXXXX|
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
+const BarrelPF2Data_1 @ ROMADDR + 0xEE3 : [u8] = [
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x80, // ; |X       |
+0xFF, // ; |XXXXXXXX|
+0xFF, // ; |XXXXXXXX|
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+];
+  
+#[compile_if(NTSC)] const DNEFF @ ROMADDR + 0xEFF : [u8] = [0xA0];
 
-   IF NTSC
+
+/*   IF NTSC
 
    .byte $A0
 
@@ -3224,113 +3309,122 @@ BarrelPF2Data_1
 
    ENDIF
 */
-const MarioAnimationTable @ ROMADDR + 0xF00: [u8] = [
-  <:(&StationaryMarioSprite as u16 - (WALKWAY_HEIGHTM1)),// $4D,
-  <:(&RunningMarioSprite1 as u16 -WALKWAY_HEIGHTM1),// $5F,
-  <:(&StationaryMarioSprite as u16  - WALKWAY_HEIGHTM1),// $4D,
-  <:(&RunningMarioSprite2 as u16  - WALKWAY_HEIGHTM1),// $72,
-  <:(&JumpingMarioSprite as u16  - WALKWAY_HEIGHTM1),// $87,
-  <:(&ClimbingMarioSprite as u16  - WALKWAY_HEIGHTM1),// $97,
-  <:(&StationaryMarioSprite as u16  - WALKWAY_HEIGHTM1),// $4D
+#[compile_if(!NTSC)] const DNEFF @ ROMADDR + 0xEFF : [u8] = [0x00];
+  
+}
+
+in rom @ ROMADDR + 0xF00 {
+const MarioAnimationTable : [u8] = [
+  <:(&StationaryMarioSprite as u16 - (WALKWAY_HEIGHTP1) as u16),// $4D,
+  <:(&RunningMarioSprite1 as u16 -WALKWAY_HEIGHTP1 as u16),// $5F,
+  <:(&StationaryMarioSprite as u16  - WALKWAY_HEIGHTP1 as u16),// $4D,
+  <:(&RunningMarioSprite2 as u16  - WALKWAY_HEIGHTP1 as u16),// $72,
+  <:(&JumpingMarioSprite as u16  - WALKWAY_HEIGHTP1 as u16),// $87,
+  <:(&ClimbingMarioSprite as u16  - WALKWAY_HEIGHTP1 as u16),// $97,
+  <:(&StationaryMarioSprite as u16  - WALKWAY_HEIGHTP1 as u16),// $4D
   ];
-  /*
-BarrelPF0Data_2
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |
-   .byte $F0 ; |XXXX    |
-   .byte $50 ; | X X    |
-   .byte $A0 ; |X X     |
-   .byte $D0 ; |XX X    |
-   .byte $70 ; | XXXX   |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-BarrelRightPF1Data_0
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $10 ; |   X    |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $70 ; | XXX    |
-   .byte $D0 ; |XX X    |
-   .byte $A0 ; |X X     |
-   .byte $50 ; | X X    |
-   .byte $F0 ; |XXXX    |
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-BarrelRightPF1Data_2
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $40 ; | X      |
-   .byte $00 ; |        |
-   .byte $80 ; |X       |
-   .byte $F0 ; |XXXX    |
-   .byte $50 ; | X X    |
-   .byte $A0 ; |X X     |
-   .byte $D0 ; |XX X    |
-   .byte $70 ; | XXX    |
-   .byte $00 ; |        |
-BarrelRightPF1Data_3
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $70 ; | XXX    |
-   .byte $D0 ; |XX X    |
-   .byte $A0 ; |X X     |
-   .byte $50 ; | X X    |
-   .byte $F0 ; |XXXX    |
-   .byte $80 ; |X       |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-BarrelRightPF1Data_4
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |       
-   */
+
+const BarrelPF0Data_2 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x80, // ; |X       |
+0xF0, // ; |XXXX    |
+0x50, // ; | X X    |
+0xA0, // ; |X X     |
+0xD0, // ; |XX X    |
+0x70, // ; | XXXX   |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+];
+const BarrelRightPF1Data_0 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x10, // ; |   X    |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x70, // ; | XXX    |
+0xD0, // ; |XX X    |
+0xA0, // ; |X X     |
+0x50, // ; | X X    |
+0xF0, // ; |XXXX    |
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+];
+const BarrelRightPF1Data_2 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x40, // ; | X      |
+0x00, // ; |        |
+0x80, // ; |X       |
+0xF0, // ; |XXXX    |
+0x50, // ; | X X    |
+0xA0, // ; |X X     |
+0xD0, // ; |XX X    |
+0x70, // ; | XXX    |
+0x00, // ; |        |
+];
+const BarrelRightPF1Data_3 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x70, // ; | XXX    |
+0xD0, // ; |XX X    |
+0xA0, // ; |X X     |
+0x50, // ; | X X    |
+0xF0, // ; |XXXX    |
+0x80, // ; |X       |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+];
+const BarrelRightPF1Data_4 : [u8] = [
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |
+0x00, // ; |        |       
+];
 const BarrelPF0Data_6 @ ROMADDR + 0xF62 : [u8] = [
   0x00, // ; |        |
   0x00, // ; |        |
@@ -3355,37 +3449,20 @@ const NoHammerAnimation @ ROMADDR + 0xF70 : [u8] = [
   0x00, // ; |        |
   0x00, // ; |        |
 ];
-  /*
-BarrelRightPF1Data_5
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $F0 ; |XXXX    |
+const BarrelRightPF1Data_5 @ ROMADDR + 0xF75: [u8] = [
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0x00, //; |        |
+0xF0, //; |XXXX    |
+];
+  
 
-MallotAnimation1
-   .byte $F0,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-
-HandleAnimation1
-   .byte $00 ; |        | 
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |   
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $FF ; |XXXXXXXX|
-   .byte $FF ; |XXXXXXXX|
-   .byte $FF ; |XXXXXXXX|
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-   .byte $00 ; |        |
-*/
 const HandleAnimation2 @ ROMADDR + 0xF9A: [u8] = [
   0xFF, // ; |XXXXXXXX|
   0x00, // ; |        | 
@@ -3417,15 +3494,38 @@ const MallotAnimation2 @ ROMADDR + 0xFA7: [u8] = [
   0x00, // ; |        |   
   0x00, // ; |        |
 ];
-  /*
+  const ScoringSoundFrequency @ ROMADDR + 0xFC3 : [u8] = [
+    0x0A,0x0A,0x0A,0x0A,0x0A,0x0A,0x0A,
+    0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,
+    0x07,0x07,0x07,0x07,0x07,
+    0x08,0x08,0x08,0x08,0x08,
+    0x0A,0x0A,0x0A,0x0A,0x0A
+  ];
+//in rom @ ROMADDR + 0xFE4 {
+  const BarrelLeftPF1Tablem1 @ ROMADDR + 0xFE3 : [u8] = [];
+  const BarrelLeftPF1Table @ ROMADDR + 0xFE4 : [u8] = [
+    0x02, 0x1D, 0x36, 0x1D, 0x36
+  ]; //                        BarrelLeftPF1Table
+  const BarrelPF2Table @ ROMADDR + 0xFE9 : [u8] = [
+    0x4F, 0xE3, 0x6B, 0x87, 0xA0, 0xB8
+  ]; //      BarrelPF2Table
+  const BarrelPF0Table @ ROMADDR + 0xFEF : [u8] = [
+    0xD4, 0x71, 0x04, 0x1C, 0x34, 0x49, 0x62
+  ]; //                                 BarrelPF0Table
+  const LoopCountTable @ ROMADDR + 0xFF6 : [u8] = [
+    0x0C, 0x02, 0x02, 0x02, 0x02, 0x02
+  ];
+//}
 
+  
+const DNFB4 @ ROMADDR + 0xFB4 : [u8] = [ 
+    
+    0x00,0x00,0x00,0x00,
+    0xFF,0xFF,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,
 
-   .byte $00,$00,$00,$00
-
-
-   .byte $FF,$FF,$00,$00,$00,$00,$00,$00
-       .byte $00,$00,$00
-
+];
+/*
 ScoringSoundFrequency
    .byte $0A,$0A,$0A,$0A,$0A,$0A,$0A
    .byte $06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06

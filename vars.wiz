@@ -53,9 +53,17 @@ var zpZeroOrOne        @ 0x9E : u8 ;//    ; 0 for barrels 1 for firefox -- seems
 var rivets             @ 0x9F : u8 ;//    ; $9F-$A2
 var rivetsA             @ 0x9F : [u8;4] ;//    ; $9F-$A2
 var rivetsm2           @ 0x9D : [u8;10] ; // rivits - 2
+var rivetsm3           @ 0x9C : [u8;10] ; // rivits - 2
+
 var numberOfLives      @ 0xA3 : u8 ;//
 var bonusTimer         @ 0xA4 : u8 ;//
-var zpMarioGraphics    @ 0xA5 : [u8;10] ;//    ; $A5 - $C0
+var zpMarioGraphics    @ 0xA5 : u8 ;//    ; $A5 - $C0
+var zpMarioGraphicsA    @ 0xA5 : [u8;10] ;//    ; $A5 - $C0
+var zpMarioGraphicsp1    @ 0xA6 : u8 ;//    ; $A5 - $C0
+var zpMarioGraphicsp1A    @ 0xA6 : [u8;10] ;//    ; $A5 - $C0
+var zpMarioGraphicsp2    @ 0xA7 : u8 ;//    ; $A5 - $C0
+
+//var zpMarioGraphicsp2    @ 0xA7 : [u8;10] ;//    ; $A5 - $C0
 
 var horPosP1           @ 0xC1 : u8 ;//    ; $C1 - $C4
 var horPosP1A           @ 0xC1 : [u8;4] ;//    ; $C1 - $C4
@@ -68,15 +76,25 @@ var directionP1A        @ 0xC5 : [u8;4] ;//    ; $C5 - $C8
 var barrelLadderNumber   @ 0xC9 : u8 ;//    ; $C9 - $CC
 var barrelLadderNumberA   @ 0xC9 : [u8;10] ;//    ; $C9 - $CC
 var barrelLadderNumberAP3   @ 0xCC : [u8;10] ;//    ; $C9 - $CC
-                              
+
+var coarseHorPosP1m1A       @ 0xCC : [u8;10] ;//    ; $CD - $D2
+
 var coarseHorPosP1       @ 0xCD : u8 ;//    ; $CD - $D2
 var coarseHorPosP1A       @ 0xCD : [u8;10] ;//    ; $CD - $D2
-                              
+
+var fineHorPosP1m1A         @ 0xD2 : [u8;10] ;//    ; $D3 - $D8
+
 var fineHorPosP1         @ 0xD3 : u8 ;//    ; $D3 - $D8
+
 var fineHorPosP1A         @ 0xD3 : [u8;10] ;//    ; $D3 - $D8
 var rightPF1Pointerm5A      @ 0xD4 : [u8;10] ;//    ; $D9 - $DA
 var rightPF1Pointer      @ 0xD9 : u8 ;//    ; $D9 - $DA
+var rightPF1Pointeru16      @ 0xD9 : u16 ;//    ; $D9 - $DA
+
 var pf0Pointer           @ 0xDB : u8 ;//    ; $DB - $DC
+var pf0PointerA           @ 0xDB : [u8;10] ;//    ; $DB - $DC
+var pf0Pointeru16           @ 0xDB : u16 ;//    ; $DB - $DC
+
 var pf0Pointerp1           @ 0xDB + 1: u8 ;//    ; $DB - $DC
 
 var digitPointerm4       @ 0xD9 : [u8;4] ;//    ; $DD - $E5
@@ -98,12 +116,18 @@ var digitPointerp8         @ 0xDD + 0x08: u8 ;//    ; $DD - $E5
 
 //;-------------------------------------------
 var pf2Pointer           @ 0xDD : u8;
+var pf2Pointeru16           @ 0xDD : u16;
+
 var pf2Pointerp1           @ 0xDD + 1 : u8;
 
 var leftPF1Pointer       @ 0xDD+2 : u8;
+var leftPF1Pointeru16       @ 0xDD+2 : u16;
+
 var leftPF1Pointerp1       @ 0xDD+3 : u8;
 
 var obstaclePointer      @ 0xDD+4   : u8; //$E1 - $E2
+var obstaclePointeru16      @ 0xDD+4   : u16; //$E1 - $E2
+
 var obstaclePointerA     @ 0xDD+4   : [u8;10]; //$E1 - $E2
 
 var marioGraphicPointer  @ 0xDD+6   : u8; //$E3 - $E4
@@ -113,7 +137,8 @@ var marioGraphicPointerA  @ 0xDD+6   : [u8;4]; //$E3 - $E4
 var marioGraphicPointerB  @ 0xDD+6   : u16; //$E3 - $E4
 
 //;-------------------------------------------
-var marioColorPointer    @ 0xDD+6 : u16 ; // marioGraphicPointer
+var marioColorPointeru16    @ 0xDD+6 : u16 ; // marioGraphicPointer
+var marioColorPointer    @ 0xDD+6 : u8 ; // marioGraphicPointer
 var marioColorPointerA    @ 0xDD+6 : [u8;10] ; // marioGraphicPointer
 
 var audioFrequencyPointer16 @ 0xDD+6 : u16 ; // marioGraphicPointer
@@ -151,7 +176,7 @@ var hammerKernelVector   @ 0xEE : [u8;4] ;//    ; pointer to hammer kernel ($EE 
 var kernelVector         @ 0xF0 : u8 ;//    ; pointer to no ladder kerenel ($F0 - $F1)
 var obstaclePointerLSBm1   @ 0xF1 : [u8;6] ;//    ; $F2 - $F7
 var obstaclePointerLSB   @ 0xF2 : [u8;6] ;//    ; $F2 - $F7
-var marioColorPointerLSBM1 @ 0xF7 : [u8;6]; //
+var marioColorPointerLSBm1A @ 0xF7 : [u8;6]; //
 var marioColorPointerLSB @ 0xF8 : [u8;6] ;//    ; $F8 - $FD
 
 let ONE_COPY        = 0b000;

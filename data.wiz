@@ -55,7 +55,7 @@ in rom @ ROMADDR + 0xA00 {
 
   ];
 
-  const HorizontalColors @ ROMADDR + 0xB22: [u8;44] = [
+  const HorizontalColors @ ROMADDR + 0xB22: [u8;46] = [
     //REPEAT WALKWAY_HEIGHT + 2
     //   .byte BLACK
     //   REPEND
@@ -63,7 +63,7 @@ in rom @ ROMADDR + 0xA00 {
     BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
     BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
     BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
-    BLACK, BLACK, BLACK, 
+    BLACK, BLACK, BLACK, BLACK, BLACK, 
 
     BLUE_GREEN,
     BLUE_GREEN,

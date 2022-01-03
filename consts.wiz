@@ -6,7 +6,7 @@ let NTSC            = true;//             ; 1 = NTSC -or- 0 = PAL
 
 //; color constants:
 let BLACK       =  0x00;//$00
-let WHITE       =  0x00; //$0F
+let WHITE       =  0x0F; //$0F
 
 //   IF NTSC
    
