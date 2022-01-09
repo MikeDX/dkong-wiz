@@ -1,0 +1,447 @@
+import "banks";
+import "vars";
+import "consts";
+import "vcs";
+
+
+
+var MarioGraphics @ 0xF969 : [u8;10];
+
+in rom @ ROMADDR + 0x969 {
+  const StationaryMarioSprite : [u8] = [
+    0x00,0x3F,0x1B,0x1B,0x3F,0x7B,0x75,0x76,0x7B,0x3F,0x1F,0x3E,0x0F,0xDB,0x6B,0x1A,0x7E,0x1C,
+    /*
+    0x00, // ; |        | $F969
+    0x3F, // ; |  XXXXXX| $F96A
+    0x1B, // ; |   XX XX| $F96B
+    0x1B, // ; |   XX XX| $F96C
+    0x3F, // ; |  XXXXXX| $F96D
+    0x7B, // ; | XXXX XX| $F96E
+    0x75, // ; | XXX X X| $F96F
+    0x76, // ; | XXX XX | $F970
+    0x7B, // ; | XXXX XX| $F971
+    0x3F, // ; |  XXXXXX| $F972
+    0x1F, // ; |   XXXXX| $F973
+    0x3E, // ; |  XXXXX | $F974
+    0x0F, // ; |    XXXX| $F975
+    0xDB, // ; |XX XX XX| $F976
+    0x6B, // ; | XX X XX| $F977
+    0x1A, // ; |   XX X | $F978
+    0x7E, // ; | XXXXXX | $F979
+    0x1C, // ; |   XXX  | $F97A
+    */
+  ];
+  const RunningMarioSprite1 : [u8] = [
+    0x00,0x06,0x02,0x02,0xEE,0xFC,0xBD,0xBD,0x7F,0xF7,0xFE,0x9E,0x0F,0xDB,0x6B,0x1A,0x7E,0x1C,0x00,
+    /*
+    0x00, // ; |        | $F97B
+    0x06, // ; |     XX | $F97C
+    0x02, // ; |      X | $F97D
+    0x02, // ; |      X | $F97E
+    0xEE, // ; |XXX XXX | $F97F
+    0xFC, // ; |XXXXXX  | $F980
+    0xBD, // ; |X XXXX X| $F981
+    0xBD, // ; |X XXXX X| $F982
+    0x7F, // ; | XXXXXXX| $F983
+    0xF7, // ; |XXXX XXX| $F984
+    0xFE, // ; |XXXXXXX | $F985
+    0x9E, // ; |X  XXXX | $F986
+    0x0F, // ; |    XXXX| $F987
+    0xDB, // ; |XX XX XX| $F988
+    0x6B, // ; | XX X XX| $F989
+    0x1A, // ; |   XX X | $F98A
+    0x7E, // ; | XXXXXX | $F98B
+    0x1C, // ; |   XXX  | $F98C
+    0x00, // ; |        | $F98D
+    */
+    
+  ];
+  const RunningMarioSprite2 : [u8] = [
+    0x00,0x1C,0x0C,0x0D,0x1F,0x1F,0x0E,0x7E,0x7E,0x3E,0x1C,0x0F,0xDB,0x6B,0x1A,0x7E,0x1C,0x00,0x00,0x00,0x00,
+/*
+    0x00, // ; |        | $F98E
+    0x1C, // ; |   XXX  | $F98F
+    0x0C, // ; |    XX  | $F990
+    0x0D, // ; |    XX X| $F991
+    0x1F, // ; |   XXXXX| $F992
+    0x1F, // ; |   XXXXX| $F993
+    0x0E, // ; |    XXX | $F994
+    0x7E, // ; | XXXXXX | $F995
+    0x7E, // ; | XXXXXX | $F996
+    0x3E, // ; |  XXXXX | $F997
+    0x1C, // ; |   XXX  | $F998
+    0x0F, // ; |    XXXX| $F999
+    0xDB, // ; |XX XX XX| $F99A
+    0x6B, // ; | XX X XX| $F99B
+    0x1A, // ; |   XX X | $F99C
+    0x7E, // ; | XXXXXX | $F99D
+    0x1C, // ; |   XXX  | $F99E
+    0x00, // ; |        | $F99F
+    0x00, // ; |        | $F9A0
+    0x00, // ; |        | $F9A1
+    0x00, // ; |        | $F9A2
+    */
+  ];
+
+  const JumpingMarioSprite : [u8] = [
+    0x00,0x00,0x07,0xFF,0xFE,0xBC,0x3F,0xFF,0xFE,0x3E,0x0F,0xDB,0x6B,0x1A,0x7E,0x1C,
+/*
+    0x00, // ; |        | $F9A3
+    0x00, // ; |        | $F9A4
+    0x07, // ; |     XXX| $F9A5
+    0xFF, // ; |XXXXXXXX| $F9A6
+    0xFE, // ; |XXXXXXX | $F9A7
+    0xBC, // ; |X XXXX  | $F9A8
+    0x3F, // ; |  XXXXXX| $F9A9
+    0xFF, // ; |XXXXXXXX| $F9AA
+    0xFE, // ; |XXXXXXX | $F9AB
+    0x3E, // ; |  XXXXX | $F9AC
+    0x0F, // ; |    XXXX| $F9AD
+    0xDB, // ; |XX XX XX| $F9AE
+    0x6B, // ; | XX X XX| $F9AF
+    0x1A, // ; |   XX X | $F9B0
+    0x7E, // ; | XXXXXX | $F9B1
+    0x1C, // ; |   XXX  | $F9B2
+    */
+  ];
+
+  const ClimbingMarioSprite : [u8] = [ 
+    0x00,0x1C,0x1C,0x0E,0x7E,0x7E,0xFE,0xFE,0x7F,0x7F,0x7F,0xFF,0xFE,0xFC,0x7C,0x60,0x00,
+/*
+    0x00, // ; |        | $F9B3
+    0x1C, // ; |   XXX  | $F9B4
+    0x1C, // ; |   XXX  | $F9B5
+    0x0E, // ; |    XXX | $F9B6
+    0x7E, // ; | XXXXXX | $F9B7
+    0x7E, // ; | XXXXXX | $F9B8
+    0xFE, // ; |XXXXXXX | $F9B9
+    0xFE, // ; |XXXXXXX | $F9BA
+    0x7F, // ; | XXXXXXX| $F9BB
+    0x7F, // ; | XXXXXXX| $F9BC
+    0x7F, // ; | XXXXXXX| $F9BD
+    0xFF, // ; |XXXXXXXX| $F9BE
+    0xFE, // ; |XXXXXXX | $F9BF
+    0xFC, // ; |XXXXXX  | $F9C0
+    0x7C, // ; | XXXXX  | $F9C1
+    0x60, // ; | XX     | $F9C2
+    0x00, // ; |        | $F9C3
+    */
+  ];
+
+}
+
+
+
+in rom @ ROMADDR + 0xB00 {
+
+  const DonkeyKong @ ROMADDR+ 0xB98 : [u8] = [
+    /*{w:8,h:20,count:1,brev:1,flip:1}*/
+    0x00, 0xE0, 0xE0, 0x67,
+    0x67, 0x7E, 0x7E, 0x3E,
+    0x5E, 0xDC, 0xBC, 0xFE,
+    0xFF, 0x7F, 0x39, 0x45,
+    0x7D, 0x55, 0x7C, 0x38
+/*    
+    0x00, // ; |        |
+    0xE0, // ; |XXX     | $FB99
+    0xE0, // ; |XXX     | $FB9A
+    0x67, // ; | XX  XXX| $FB9B
+
+    0x67, // ; | XX  XXX| $FB9C
+    0x7E, // ; | XXXXXX | $FB9D
+    0x7E, // ; | XXXXXX | $FB9E
+    0x3E, // ; |  XXXXX | $FB9F
+    
+    0x5E, // ; | X XXXX | $FBA0
+    0xDC, // ; |XX XXX  | $FBA1
+    0xBC, // ; |X XXXX  | $FBA2
+    0xFE, // ; |XXXXXXX | $FBA3
+    
+    0xFF, // ; |XXXXXXXX| $FBA4
+    0x7F, // ; | XXXXXXX| $FBA5
+    0x39, // ; |  XXX  X| $FBA6
+    0x45, // ; | X   X X| $FBA7
+    
+    0x7D, // ; | XXXXX X| $FBA8
+    0x55, // ; | X X X X| $FBA9
+    0x7C, // ; | XXXXX  | $FBAA
+    0x38, // ; |  XXX   | $FBAB
+    */
+  ];
+  
+}
+
+
+in rom @ ROMADDR + 0xC00 {
+
+  const NumberFonts : [u8] = [
+    /*{w:8,h:8,count:10,brev:1,flip:1}*/
+    0x3C, 0x66, 0x66, 0x66, 
+    0x66, 0x66, 0x3C, 0x00, 
+    0x7E, 0x18, 0x18, 0x18, 
+    0x38, 0x18, 0x08, 0x00, 
+    0x7E, 0x62, 0x60, 0x3C, 
+    0x06, 0x46, 0x3C, 0x00, 
+    0x3C, 0x46, 0x06, 0x1C, 
+    0x06, 0x46, 0x3C, 0x00, 
+    0x0C, 0x0C, 0x7E, 0x4C, 
+    0x2C, 0x1C, 0x0C, 0x00, 
+    0x3C, 0x46, 0x06, 0x7C, 
+    0x60, 0x60, 0x7E, 0x00, 
+    0x3C, 0x66, 0x66, 0x7C, 
+    0x60, 0x62, 0x3C, 0x00, 
+    0x30, 0x30, 0x18, 0x0C, 
+    0x06, 0x42, 0x7E, 0x00, 
+    0x3C, 0x66, 0x66, 0x3C, 
+    0x66, 0x66, 0x3C, 0x00, 
+    0x3C, 0x46, 0x06, 0x3E, 
+    0x66, 0x66, 0x3C, 0x00, 
+    /*
+    0x3C, // ; |  XXXX  | $FC00
+    0x66, // ; | XX  XX | $FC01
+    0x66, // ; | XX  XX | $FC02
+    0x66, // ; | XX  XX | $FC03
+    0x66, // ; | XX  XX | $FC04
+    0x66, // ; | XX  XX | $FC05
+    0x3C, // ; |  XXXX  | $FC06
+    0x00, // ; |        | $FC07
+    0x7E, // ; | XXXXXX | $FC08
+    0x18, // ; |   XX   | $FC09
+    0x18, // ; |   XX   | $FC0A
+    0x18, // ; |   XX   | $FC0B
+    0x38, // ; |  XXX   | $FC0C
+    0x18, // ; |   XX   | $FC0D
+    0x08, // ; |    X   | $FC0E
+    0x00, // ; |        | $FC0F
+    0x7E, // ; | XXXXXX | $FC10
+    0x62, // ; | XX   X | $FC11
+    0x60, // ; | XX     | $FC12
+    0x3C, // ; |  XXXX  | $FC13
+    0x06, // ; |     XX | $FC14
+    0x46, // ; | X   XX | $FC15
+    0x3C, // ; |  XXXX  | $FC16
+    0x00, // ; |        | $FC17
+    0x3C, // ; |  XXXX  | $FC18
+    0x46, // ; | X   XX | $FC19
+    0x06, // ; |     XX | $FC1A
+    0x1C, // ; |   XXX  | $FC1B
+    0x06, // ; |     XX | $FC1C
+    0x46, // ; | X   XX | $FC1D
+    0x3C, // ; |  XXXX  | $FC1E
+    0x00, // ; |        | $FC1F
+    0x0C, // ; |    XX  | $FC20
+    0x0C, // ; |    XX  | $FC21
+    0x7E, // ; | XXXXXX | $FC22
+    0x4C, // ; | X  XX  | $FC23
+    0x2C, // ; |  X XX  | $FC24
+    0x1C, // ; |   XXX  | $FC25
+    0x0C, // ; |    XX  | $FC26
+    0x00, // ; |        | $FC27
+    0x3C, // ; |  XXXX  | $FC28
+    0x46, // ; | X   XX | $FC29
+    0x06, // ; |     XX | $FC2A
+    0x7C, // ; | XXXXX  | $FC2B
+    0x60, // ; | XX     | $FC2C
+    0x60, // ; | XX     | $FC2D
+    0x7E, // ; | XXXXXX | $FC2E
+    0x00, // ; |        | $FC2F
+    0x3C, // ; |  XXXX  | $FC30
+    0x66, // ; | XX  XX | $FC31
+    0x66, // ; | XX  XX | $FC32
+    0x7C, // ; | XXXXX  | $FC33
+    0x60, // ; | XX     | $FC34
+    0x62, // ; | XX   X | $FC35
+    0x3C, // ; |  XXXX  | $FC36
+    0x00, // ; |        | $FC37
+    0x30, // ; |  XX    | $FC38
+    0x30, // ; |  XX    | $FC39
+    0x18, // ; |   XX   | $FC3A
+    0x0C, // ; |    XX  | $FC3B
+    0x06, // ; |     XX | $FC3C
+    0x42, // ; | X    X | $FC3D
+    0x7E, // ; | XXXXXX | $FC3E
+    0x00, // ; |        | $FC3F
+    0x3C, // ; |  XXXX  | $FC40
+    0x66, // ; | XX  XX | $FC41
+    0x66, // ; | XX  XX | $FC42
+    0x3C, // ; |  XXXX  | $FC43
+    0x66, // ; | XX  XX | $FC44
+    0x66, // ; | XX  XX | $FC45
+    0x3C, // ; |  XXXX  | $FC46
+    0x00, // ; |        | $FC47
+    0x3C, // ; |  XXXX  | $FC48
+    0x46, // ; | X   XX | $FC49
+    0x06, // ; |     XX | $FC4A
+    0x3E, // ; |  XXXXX | $FC4B
+    0x66, // ; | XX  XX | $FC4C
+    0x66, // ; | XX  XX | $FC4D
+    0x3C, // ; |  XXXX  | $FC4E
+    0x00, // ; |        | $FC4F
+    */
+  ];
+
+
+  const HorizontalBarrelSprite @ ROMADDR + 0xC5D  : [u8;37] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00,
+    /*{w:8,h:8,count:1,brev:1,flip:1}*/
+    0x3C, 0x6E, 0xFB, 0xBF,
+    0xFD, 0xDF, 0x76, 0x3C,
+    /*    
+    0x3C,  // ; |  XXXX  | $FC7A
+    0x6E,  // ; | XX XXX | $FC7B
+    0xFB,  // ; |XXXXX XX| $FC7C
+    0xBF,  // ; |X XXXXXX| $FC7D
+    0xFD,  // ; |XXXXXX X| $FC7E
+    0xDF,  // ; |XX XXXXX| $FC7F
+    0x76,  // ; | XXX XX | $FC80
+    0x3C,  // ; |  XXXX  | $FC81
+*/
+  ];
+
+  const FallingBarrelSprite @ ROMADDR + 0xC82 : [u8] = [
+    /*   
+    REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+    .byte $00                     ; blank line
+    REPEND
+    */
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,
+
+    /*{w:8,h:8,count:1,brev:1,flip:1}*/
+    0x7E, 0x99, 0xBD, 0x81, 
+    0xBD, 0x99, 0x7E, 0x00, 
+    /*
+   .byte $7E ; | XXXXXX | $FC9F
+   .byte $99 ; |X  XX  X| $FCA0
+   .byte $BD ; |X XXXX X| $FCA1
+   .byte $81 ; |X      X| $FCA2
+   .byte $BD ; |X XXXX X| $FCA3
+   .byte $99 ; |X  XX  X| $FCA4
+   .byte $7E ; | XXXXXX | $FCA5
+   .byte $00 ; |        | $FCA6
+    */
+  ];
+
+  const FirefoxSprite @ ROMADDR + 0xCA7 : [u8] = [
+
+    /*   
+    REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+    .byte $00                     ; blank line
+    REPEND
+    */
+
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,
+
+    /*{w:8,h:8,count:1,brev:1,flip:1}*/
+    0x38, 0x7E, 0xFF, 0xFF,
+    0x71, 0xAA, 0xAA, 0x71,
+    /*    0x38, // ; |  XXX   | $FCC4
+    0x7E, // ; | XXXXXX | $FCC5
+    0xFF, // ; |XXXXXXXX| $FCC6
+    0xFF, // ; |XXXXXXXX| $FCC7
+    0x71, // ; | XXX   X| $FCC8
+    0xAA, // ; |X X X X | $FCC9
+    0xAA, // ; |X X X X | $FCCA
+    0x71, // ; | XXX   X| $FCCB
+*/
+/*
+REPEAT OBSTACLE_HEIGHT - OBSTACLE_GRAPHIC_HEIGHT + 1
+   .byte $00                     ; blank line
+REPEND
+*/
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,
+
+  ];
+
+}
+
+in rom @ ROMADDR + 0xD00 {
+  const Girlfriend @ ROMADDR + 0xDAC : [u8] = [
+    /*{w:8,h:20,count:1,brev:1,flip:1}*/
+    0x00, 0x43, 0x82, 0x7E,
+    0x7F, 0xFF, 0x7E, 0x3C,
+    0x18, 0x7E, 0x38, 0x9C,
+    0x7E, 0xBF, 0x3A, 0x1F,
+    0x07, 0x00, 0x00, 0x00
+/*
+    0x00, // ; |        |
+    0x43, // ; | X    XX| $FDAD
+    0x82, // ; |X     X | $FDAE
+    0x7E, // ; | XXXXXX | $FDAF 
+    0x7F, // ; | XXXXXXX| $FDB0
+    0xFF, // ; |XXXXXXXX| $FDB1
+    0x7E, // ; | XXXXXX | $FDB2
+    0x3C, // ; |  XXXX  | $FDB3   
+    0x18, // ; |   XX   | $FDB4
+    0x7E, // ; | XXXXXX | $FDB5
+    0x38, // ; |  XXX   | $FDB6
+    0x9C, // ; |X  XXX  | $FDB7
+    0x7E, // ; | XXXXXX | $FDB8
+    0xBF, // ; |X XXXXXX| $FDB9
+    0x3A, // ; |  XXX X | $FDBA
+    0x1F, // ; |   XXXXX| $FDBB    
+    0x07, // ; |     XXX| $FDBC
+    0x00, // ; |        | $FDBD
+    0x00, // ; |        | $FDBE
+    0x00, // ; |        | $FDBF
+    */
+  ];
+  
+
+}
+
+
+
+
+
+
+in rom @ ROMADDR + 0x9C4 {
+
+  const JumpingSoundFrequency : [u8] = [
+    0x0F,0x0F,0x0F,0x0F,0x0F,
+    0x0F,0x0E,0x0D,0x0D,0x0D,
+    0x0E,0x0F,0x0F,0x0F,0x0F,
+    0x0F,0x0E,0x0D,0x0D,0x0E
+  ]; 
+
+  const JumpingSoundFrequency2  : [u8] = [
+    0x0F,0x0F,0x0F,0x0F,
+    0x0E,0x0D,0x0E,0x0F,
+    0x0F,0x0F,0x0E,0x0F
+  ];
+
+  const ObstacleColor : u8 = ORANGE; //   .byte ORANGE                     ; color of hammer handle and obstacles
+
+  const GirlfriendColorsm2  @ ROMADDR + 0x9E3: [u8] = [];
+
+  const GirlfriendColors @ ROMADDR + 0x9E5 : [u8] = [
+    YELLOW,
+    YELLOW,
+    TURQUISE,
+    TURQUISE,
+    TURQUISE,
+    TURQUISE,
+    TURQUISE,
+    SASH_RED,
+    TURQUISE,
+    TURQUISE,
+    BLONDE,
+    BLONDE,
+    BLONDE,
+    BLONDE,
+    BLONDE,
+    BLONDE
+  ];
+
+}

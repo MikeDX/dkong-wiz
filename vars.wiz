@@ -173,7 +173,7 @@ var missile1Size         @ 0xED : u8 ; // obstacleNumber;
 var temp                 @ 0xED : u8 ; // missile1Size;
 
 var hammerKernelVector   @ 0xEE : [u8;4] ;//    ; pointer to hammer kernel ($EE - $EF)
-var kernelVector         @ 0xF0 : u8 ;//    ; pointer to no ladder kerenel ($F0 - $F1)
+var kernelVector         @ 0xF0 : *u16 ;//    ; pointer to no ladder kerenel ($F0 - $F1)
 var obstaclePointerLSBm1   @ 0xF1 : [u8;6] ;//    ; $F2 - $F7
 var obstaclePointerLSB   @ 0xF2 : [u8;6] ;//    ; $F2 - $F7
 var marioColorPointerLSBm1A @ 0xF7 : [u8;6]; //
