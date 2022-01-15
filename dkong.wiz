@@ -204,34 +204,41 @@ in rom @ ROMADDR {
   a = verPosMario; //   lda verPosMario
   carry = true; //   sec
   a = a -# WALKWAY_HEIGHTM5;  //   sbc #WALKWAY_HEIGHT-5
-  goto walkwayFound if !carry; //   bcc .walkwayFound
-  determineWalkwayLoop:
-  x--; //   dex
-  a = a -# WALKWAY_HEIGHTP1; //   sbc #WALKWAY_HEIGHT+1
-  goto determineWalkwayLoop if carry; //   bcs .determineWalkwayLoop
-
-  walkwayFound:
+  if carry {
+//  goto walkwayFound if !carry; //   bcc .walkwayFound
+    determineWalkwayLoop:
+    x--; //   dex
+    a = a -# WALKWAY_HEIGHTP1; //   sbc #WALKWAY_HEIGHT+1
+    goto determineWalkwayLoop if carry; //   bcs .determineWalkwayLoop
+  }
+//  walkwayFound:
   walkwayNumber = x; //   stx walkwayNumber
-  a = joystickValue; //   lda joystickValue
-  a = a << 1; //   asl                              ; right motion is now if carry bit
-  goto skipLeftMotion if negative; //   bmi .skipLeftMotion              ; left motion in D7
-  randomSeed++; //   inc randomSeed
-  a = NO_REFLECT; //   lda #NO_REFLECT
-  marioDirection = a; //   sta marioDirection
-  horPosMario--; //   dec horPosMario                  ; move Mario left
-  VAR84--; //   dec $84
-  y = XMIN_LEVEL1; //   ldy #XMIN_LEVEL1                 ; load y with the minimum horiz value for the firefox screen
-  a = gameScreen; //   lda gameScreen                   ; get the current game screen
-  goto checkMinHorizPosition if !zero; //   bne .checkMinHorizPosition       ; if the Firefox screen then branch
-  a = walkwayNumber; //   lda walkwayNumber
-  a = a >>> 1; //   lsr                              ; shift the walkway number right
-  goto checkMinHorizPosition if carry; //   bcs .checkMinHorizPosition       ; if it's an odd walkway then branch
-  y = XMIN_ODD_LEVEL0; //   ldy #XMIN_ODD_LEVEL0
-  checkMinHorizPosition:
-  cmp(y,horPosMario); //   cpy horPosMario
-  goto CheckRampValues if !carry; //   bcc CheckRampValues
-  goto setMarioHorizPosition if carry; //   bcs .setMarioHorizPosition
-  skipLeftMotion:
+  a = joystickValue << 1; //   lda joystickValue
+ // a = a << 1; //   asl                              ; right motion is now if carry bit
+  if !negative { 
+    //goto skipLeftMotion if negative; //   bmi .skipLeftMotion              ; left motion in D7
+    randomSeed++; //   inc randomSeed
+    marioDirection = a = NO_REFLECT; //   lda #NO_REFLECT
+    //marioDirection = a; //   sta marioDirection
+    horPosMario--; //   dec horPosMario                  ; move Mario left
+    VAR84--; //   dec $84
+    y = XMIN_LEVEL1; //   ldy #XMIN_LEVEL1                 ; load y with the minimum horiz value for the firefox screen
+    a = gameScreen; //   lda gameScreen                   ; get the current game screen
+    if zero { 
+//      goto checkMinHorizPosition if !zero; //   bne .checkMinHorizPosition       ; if the Firefox screen then branch
+      a = walkwayNumber >>> 1; //   lda walkwayNumber
+      //a = a >>> 1; //   lsr                              ; shift the walkway number right
+      if !carry { 
+        //goto checkMinHorizPosition if carry; //   bcs .checkMinHorizPosition       ; if it's an odd walkway then branch
+        y = XMIN_ODD_LEVEL0; //   ldy #XMIN_ODD_LEVEL0
+      }
+    }
+//    checkMinHorizPosition:
+    cmp(y,horPosMario); //   cpy horPosMario
+    goto CheckRampValues if !carry; //   bcc CheckRampValues
+    goto setMarioHorizPosition if carry; //   bcs .setMarioHorizPosition
+  } 
+  //skipLeftMotion:
   goto CheckVerticalJoystickValues if carry; //   bcs CheckVerticalJoystickValues
   randomSeed++;//   inc randomSeed
   a = REFLECT; //   lda #REFLECT
@@ -266,21 +273,27 @@ in rom @ ROMADDR {
   x = 0x07; //   ldx #$07
   a = horPosMario; //   lda horPosMario
   y = marioDirection; //   ldy marioDirection
-  goto rampLoop1 if !zero; //   bne .rampLoop                    ; branch if Mario is moving left
+  if zero { 
+    //goto rampLoop1 if !zero; //   bne .rampLoop                    ; branch if Mario is moving left
   carry = false; //   clc
   a = a +#1; //   adc #$01
-    rampLoop1:
-  x--; //   dex
-  goto doneMarioHorizMovement if negative;//   bmi .doneMarioHorizMovement
-  cmp(a,RampHorizValues[x]); //   cmp RampHorizValues,x
-  goto rampLoop1 if !zero; //   bne .rampLoop
-  a = walkwayNumber; //   lda walkwayNumber                ; get the current walkway number
-  a = a >>> 1; //   lsr
-  goto checkEvenNumberRamp if !carry; //   bcc .checkEvenNumberRamp         ; if it's even then branch
-  a = y; //   tya                              ; move Mario direction to the accumulator
-  goto moveUpRamp if !zero; //   bne .moveUpRamp                  ; branch if Mario is moving left
-  goto moveDownRamp if zero; //   beq .moveDownRamp
-  checkEvenNumberRamp:
+    }
+  //rampLoop1:
+  do { 
+    x--; //   dex
+    goto doneMarioHorizMovement if negative;//   bmi .doneMarioHorizMovement
+    cmp(a,RampHorizValues[x]); //   cmp RampHorizValues,x
+  } while !zero; //goto rampLoop1 if !zero; //   bne .rampLoop
+  
+  a = walkwayNumber >>> 1; //   lda walkwayNumber                ; get the current walkway number
+  //a = a >>> 1; //   lsr
+  if carry { 
+    //goto checkEvenNumberRamp if !carry; //   bcc .checkEvenNumberRamp         ; if it's even then branch
+    a = y; //   tya                              ; move Mario direction to the accumulator
+    goto moveUpRamp if !zero; //   bne .moveUpRamp                  ; branch if Mario is moving left
+    goto moveDownRamp if zero; //   beq .moveDownRamp
+  }
+  //checkEvenNumberRamp:
   a = y; //   tya                              ; move Mario direction to the accumulator
   goto moveDownRamp if !zero; //   bne .moveDownRamp                ; branch if Mario is moving left
   moveUpRamp:
@@ -523,23 +536,23 @@ in rom @ ROMADDR {
   y = fireButtonDebounce; //   ldy fireButtonDebounce
   goto LF2CE if !zero; //   bne LF2CE
 
-  y++; //   iny
-  soundDuration = y; //   sty soundDuration
+  //y++; //   iny
+  soundDuration = ++y; //   sty soundDuration
   fireButtonDebounce--; //   dec fireButtonDebounce
-  a = SWCHA; //   lda SWCHA
-  jumpingDirection = a; //   sta jumpingDirection
+  jumpingDirection = a = SWCHA; //   lda SWCHA
+  //jumpingDirection = a; //   sta jumpingDirection
   a = verPosMario; //   lda verPosMario
   carry = true; //   sec
   a = a -#JUMPING_HEIGHT; //   sbc #JUMPING_HEIGHT
-    verPosMario = a; //   sta verPosMario
-  a = JUMP_HANGTIME; //   lda #JUMP_HANGTIME
-  jumpHangTime = a; //   sta jumpHangTime
+  verPosMario = a; //   sta verPosMario
+  jumpHangTime = a = JUMP_HANGTIME; //   lda #JUMP_HANGTIME
+  //jumpHangTime = a; //   sta jumpHangTime
   soundIndex = a; //   sta soundIndex
   goto LF2CE if !zero; //   bne LF2CE
 
   clearFireButtonDebounce:
-  a = 0x00; //   lda #$00
-  fireButtonDebounce = a; //   sta fireButtonDebounce
+  fireButtonDebounce = a = 0x00; //   lda #$00
+  //fireButtonDebounce = a; //   sta fireButtonDebounce
 
   LF2CE:
   x = marioDirection; //   ldx marioDirection               ; Mario moving horiz then branch
@@ -554,9 +567,9 @@ in rom @ ROMADDR {
   goto LF2E8 if !zero; //   bne LF2E8
 
   LF2DD:
-  a = VAR84; //`   lda $84
-  a = a & 0x06; //   and #$06
-  a = a >>> 1; //   lsr
+  a = (VAR84 & 0x06) >>> 1; //`   lda $84
+  //a = a & 0x06; //   and #$06
+  //a = a >>> 1; //   lsr
   x = jumpHangTime; //  ldx jumpHangTime
   goto LF2E8 if zero; //   beq LF2E8
   a = 0x04; //   lda #$04
@@ -641,8 +654,8 @@ in rom @ ROMADDR {
   horPosHammer = a; //   sta horPosHammer
   y = <:(&MallotAnimation2 as u16); //   ldy #<MallotAnimation2
   x = <:(&HandleAnimation2 as u16); //   ldx #<HandleAnimation2
-  a = frameCount; //   lda frameCount
-  a = a & 0x08; //   and #$08
+  a = frameCount & 0x08; //   lda frameCount
+  //a = a & 0x08; //   and #$08
   goto SetHammerPointers if !zero; //   bne SetHammerPointers
   x = <:(&HandleAnimation1); //   ldx #<HandleAnimation1
   y = <:(&MallotAnimation1); //  ldy #<MallotAnimation1
